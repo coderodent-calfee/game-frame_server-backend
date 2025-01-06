@@ -1,0 +1,25 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+django = "*"
+djangorestframework = "*"
+requests = "*"
+jwt = "*"
+translation = "*"
+django-rest-auth = "*"
+social-auth-app-django = "*"
+python-social-auth = "*"
+django-allauth = "*"
+rest-framework-simplejwt = "*"
+django-cors-headers = "*"
+django-rest-framework = "*"
+dj-rest-auth = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"
+python_full_version = "3.12.2"
