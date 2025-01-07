@@ -16,4 +16,5 @@ urlpatterns = [
     path('token/refresh/',
          jwt_views.TokenRefreshView.as_view(),
          name ='token_refresh'),
+    path('api/game/', include('game.urls')),
 ]

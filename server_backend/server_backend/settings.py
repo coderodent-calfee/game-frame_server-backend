@@ -12,53 +12,75 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import environ
 import os
-from dotenv import load_dotenv
 
-load_dotenv()  # Load environment variables from .env file
-
-
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Initialize environment variables
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+env = environ.Env(
+    DEBUG=(bool, False)  # Default DEBUG to False if not set in .env
+)
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = True
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = = os.getenv('SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+ALLOWED_HOSTS = [
+    '192.168.0.249',
+    '192.168.0.200',
+    'localhost',
+]
 
-ALLOWED_HOSTS = []
 
-
-AUTHENTICATION_BACKENDS = (
-    'social_core.backends.google.GoogleOAuth2',  # Add this for Google authentication
-    'allauth.account.auth_backends.AuthenticationBackend',  # Django-allauth backend
-)
 
 # Django-allauth settings
 ACCOUNT_EMAIL_VERIFICATION = "none"  # Or 'optional'/'mandatory' based on requirements
 ACCOUNT_AUTHENTICATION_METHOD = "username_email"  # Or 'username', 'email'
 ACCOUNT_EMAIL_REQUIRED = True
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],    
+
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
+]
+
+AUTHENTICATION_BACKENDS = (
+    'social_core.backends.google.GoogleOAuth2',  # Add this for Google authentication
+    'allauth.account.auth_backends.AuthenticationBackend',  # Django-allauth backend
+)
+
+CORS_ALLOWED_ORIGINS = [
+    'http://192.168.0.249:8081',
+    'http://192.168.0.200:8081',
+    'http://localhost:8081',
+]
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
 }
 
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-SOCIALACCOUNT_QUERY_EMAIL = True
-
-SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
-SOCIALACCOUNT_LOGIN_ON_GET = True  # Optional: Allows login via social account without explicit button press
+# Internationalization
+# https://docs.djangoproject.com/en/5.1/topics/i18n/
+LANGUAGE_CODE = "en-us"
 
 # Redirect URLs
 LOGIN_REDIRECT_URL = '/'  # Redirect after login
@@ -67,6 +89,7 @@ LOGOUT_REDIRECT_URL = '/'  # Redirect after logout
 # Application definition
 INSTALLED_APPS = [
     'user',
+    'game',
 
     "django.contrib.admin",
     "django.contrib.auth",
@@ -97,6 +120,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    'corsheaders.middleware.CorsMiddleware',
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -104,10 +128,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     'allauth.account.middleware.AccountMiddleware',
     'social_django.middleware.SocialAuthExceptionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
 ]
 
-ROOT_URLCONF = "server_backend.urls"
 
 TEMPLATES = [
     {
@@ -125,46 +147,25 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "server_backend.wsgi.application"
-
-# settings.py
-
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = '337631635869-qu3u5bg9fbp5e5atbhdbigqjokm7lk0j.apps.googleusercontent.com'  # Replace with your Client ID
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = = os.getenv('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET')
-
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'APP': {
-            'client_id': SOCIAL_AUTH_GOOGLE_OAUTH2_KEY,
-            'secret': SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET,
-            'key': '',
-        }
-    },
-    'facebook': {
-        'APP': {
-            'client_id': 'your-facebook-app-id',
-            'secret': 'your-facebook-app-secret',
-            'key': '',
-        }
-    },
-}
-
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
-
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        #'rest_framework.permissions.IsAuthenticated',
+    ],
 }
+
+ROOT_URLCONF = "server_backend.urls"
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = env('SECRET_KEY')
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10),
@@ -183,26 +184,40 @@ SIMPLE_JWT = {
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
-]
+SITE_ID = 1
 
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = '337631635869-qu3u5bg9fbp5e5atbhdbigqjokm7lk0j.apps.googleusercontent.com'  # Replace with your Client ID
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = env('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET')
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.1/topics/i18n/
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': SOCIAL_AUTH_GOOGLE_OAUTH2_KEY,
+            'secret': SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET,
+            'key': '',
+        }
+    },
+    'facebook': {
+        'APP': {
+            'client_id': 'your-facebook-app-id',
+            'secret': 'your-facebook-app-secret',
+            'key': '',
+        }
+    },
+}
 
-LANGUAGE_CODE = "en-us"
+# Default primary key field type
+# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
+
+SOCIALACCOUNT_QUERY_EMAIL = True
+
+SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
+SOCIALACCOUNT_LOGIN_ON_GET = True  # Optional: Allows login via social account without explicit button press
+
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/5.1/howto/static-files/
+
+STATIC_URL = "static/"
 
 TIME_ZONE = "UTC"
 
@@ -210,14 +225,5 @@ USE_I18N = True
 
 USE_TZ = True
 
-SITE_ID = 1
+WSGI_APPLICATION = "server_backend.wsgi.application"
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.1/howto/static-files/
-
-STATIC_URL = "static/"
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
-
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

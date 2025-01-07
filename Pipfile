@@ -14,9 +14,11 @@ social-auth-app-django = "*"
 python-social-auth = "*"
 django-allauth = "*"
 rest-framework-simplejwt = "*"
-django-cors-headers = "*"
 django-rest-framework = "*"
 dj-rest-auth = "*"
+python-dotenv = "*"
+django-environ = "*"
+django-cors-headers = "*"
 
 [dev-packages]
 
