@@ -42,6 +42,7 @@ ACCOUNT_EMAIL_VERIFICATION = "none"  # Or 'optional'/'mandatory' based on requir
 ACCOUNT_AUTHENTICATION_METHOD = "username_email"  # Or 'username', 'email'
 ACCOUNT_EMAIL_REQUIRED = True
 
+AUTH_USER_MODEL = 'accounts.Account'
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -83,13 +84,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LANGUAGE_CODE = "en-us"
 
 # Redirect URLs
-LOGIN_REDIRECT_URL = '/'  # Redirect after login
-LOGOUT_REDIRECT_URL = '/'  # Redirect after logout
+LOGIN_REDIRECT_URL = '/accounts/home/'  # Redirect after login
+LOGOUT_REDIRECT_URL = '/accounts/home/'  # Redirect after logout
 
 # Application definition
 INSTALLED_APPS = [
-    'user',
     'game',
+    'accounts',
 
     "django.contrib.admin",
     "django.contrib.auth",

@@ -1,4 +1,4 @@
-# game-frame/user/views.py
+# game-frame/accounts/views.py
 from allauth.socialaccount.providers.facebook.views import FacebookOAuth2Adapter
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 
@@ -6,33 +6,45 @@ from dj_rest_auth.registration.views import SocialLoginView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 import requests
-
-# Create your views here.
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
-from .serializers import UserSerializer
+from .serializers import AccountSerializer
 from django.http import JsonResponse
-
 import logging
+from django.http import HttpResponse
+
+def home(request):
+    return HttpResponse("<h1>Accounts Dashboard</h1>")
 
 logger = logging.getLogger(__name__)
-
 logger.info("*** LOG active ***")
 
-class UserList(APIView):
-    def get(self, request):
-        users = User.objects.all()
-        serializer = UserSerializer(users, many=True)
-        return Response(serializer.data)
+class FacebookLogin(SocialLoginView):
+    adapter_class = FacebookOAuth2Adapter
 
-    def post(self, request):
-        serializer = UserSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class GoogleLogin(SocialLoginView):
+    adapter_class = GoogleOAuth2Adapter
+
+
+class CustomGoogleLogin(SocialLoginView):
+    # either make more than one or somehow switch on the path
+    adapter_class = GoogleOAuth2Adapter  # Or another provider you are using
+    client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
+
+    def get_response(self):
+        # Get the user from the social authentication process
+        user = self.user
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        access_token = refresh.access_token
+        return Response({
+            'refresh': str(refresh),
+            'access': str(access_token),
+            'user': user.username
+        })
+
 
 class GoogleCallbackView(APIView):
     def get(self, request):
@@ -98,37 +110,3 @@ class GoogleCallbackView(APIView):
             'last_name': user_info.get('family_name', ''),
         })
         return user
-    
-def google_callback(request):
-    pass
-    # Get the authorization code from the query parameters
-    authorization_code = request.GET.get('code')
-    if authorization_code:
-        # Print to the console or log the code
-        print(f" **** Authorization Code: {authorization_code} ****")
-        return JsonResponse({"message": "Authorization code received", "code": authorization_code})
-    else:
-        return JsonResponse({"error": "Authorization code not found"}, status=400)
-
-class FacebookLogin(SocialLoginView):
-    adapter_class = FacebookOAuth2Adapter
-class GoogleLogin(SocialLoginView):
-    adapter_class = GoogleOAuth2Adapter
-
-
-class CustomGoogleLogin(SocialLoginView):
-    # either make more than one or somehow switch on the path
-    adapter_class = GoogleOAuth2Adapter  # Or another provider you are using
-    client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
-
-    def get_response(self):
-        # Get the user from the social authentication process
-        user = self.user
-        # Generate JWT tokens
-        refresh = RefreshToken.for_user(user)
-        access_token = refresh.access_token
-        return Response({
-            'refresh': str(refresh),
-            'access': str(access_token),
-            'user': user.username
-        })
