@@ -27,6 +27,7 @@ class Player(models.Model):
     game = models.ForeignKey(Game, related_name='players', on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     game_identifier = models.CharField(max_length=16, editable=False)
+    userId = models.ForeignKey('accounts.Account', on_delete=models.CASCADE, related_name='players')
 
     def save(self, *args, **kwargs):
         # Set game_identifier to the game's id, truncated to 6 characters

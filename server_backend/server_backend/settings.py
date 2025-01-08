@@ -38,11 +38,10 @@ ALLOWED_HOSTS = [
 
 
 # Django-allauth settings
-ACCOUNT_EMAIL_VERIFICATION = "none"  # Or 'optional'/'mandatory' based on requirements
-ACCOUNT_AUTHENTICATION_METHOD = "username_email"  # Or 'username', 'email'
-ACCOUNT_EMAIL_REQUIRED = True
+# ACCOUNT_EMAIL_VERIFICATION = "none"  # Or 'optional'/'mandatory' based on requirements
+# ACCOUNT_AUTHENTICATION_METHOD = "username_email"  # Or 'username', 'email'
+# ACCOUNT_EMAIL_REQUIRED = True
 
-AUTH_USER_MODEL = 'accounts.Account'
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -58,17 +57,18 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",  # Default authentication backend
+]
+AUTH_USER_MODEL = 'accounts.Account'
 
-AUTHENTICATION_BACKENDS = (
-    'social_core.backends.google.GoogleOAuth2',  # Add this for Google authentication
-    'allauth.account.auth_backends.AuthenticationBackend',  # Django-allauth backend
-)
-
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://192.168.0.249:8081',
     'http://192.168.0.200:8081',
     'http://localhost:8081',
 ]
+
 
 DATABASES = {
     "default": {
@@ -83,52 +83,29 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 LANGUAGE_CODE = "en-us"
 
-# Redirect URLs
-LOGIN_REDIRECT_URL = '/accounts/home/'  # Redirect after login
-LOGOUT_REDIRECT_URL = '/accounts/home/'  # Redirect after logout
 
 # Application definition
 INSTALLED_APPS = [
     'game',
     'accounts',
-
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "django.contrib.sites",  
-    "rest_framework",
-    
-    "rest_framework.authtoken",
-    
-    "dj_rest_auth",
-    "dj_rest_auth.registration",
-    "social_django",
-    "allauth",
-    "allauth.account",
-    "allauth.socialaccount",
-    "allauth.socialaccount.providers.facebook",
-    "allauth.socialaccount.providers.google",
-    
-    "corsheaders",
-    "rest_framework_simplejwt.token_blacklist",
-    
+    "django.contrib.auth",  # Essential for user authentication
+    "django.contrib.contenttypes",  # Required by the ORM
+    "django.contrib.staticfiles",  # Required for static files (optional for now)
+    "rest_framework",  # Django REST Framework
+    "rest_framework_simplejwt",  # JWT Authentication
 ]
 
 
+
 MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
     'corsheaders.middleware.CorsMiddleware',
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    'allauth.account.middleware.AccountMiddleware',
-    'social_django.middleware.SocialAuthExceptionMiddleware',
 ]
 
 
@@ -154,15 +131,11 @@ TEMPLATES = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        #'rest_framework.permissions.IsAuthenticated',
-    ],
-}
 
+}
+REST_USE_JWT = True
 ROOT_URLCONF = "server_backend.urls"
 
 # SECURITY WARNING: keep the secret key used in production secret!
@@ -179,44 +152,11 @@ SIMPLE_JWT = {
     'AUDIENCE': None,
     'ISSUER': None,
     'AUTH_HEADER_TYPES': ('Bearer',),
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',}
+    'USER_ID_FIELD': 'userId',
+    'USER_ID_CLAIM': 'userId',}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
-
-SITE_ID = 1
-
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = '337631635869-qu3u5bg9fbp5e5atbhdbigqjokm7lk0j.apps.googleusercontent.com'  # Replace with your Client ID
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = env('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET')
-
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'APP': {
-            'client_id': SOCIAL_AUTH_GOOGLE_OAUTH2_KEY,
-            'secret': SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET,
-            'key': '',
-        }
-    },
-    'facebook': {
-        'APP': {
-            'client_id': 'your-facebook-app-id',
-            'secret': 'your-facebook-app-secret',
-            'key': '',
-        }
-    },
-}
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
-
-SOCIALACCOUNT_QUERY_EMAIL = True
-
-SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
-SOCIALACCOUNT_LOGIN_ON_GET = True  # Optional: Allows login via social account without explicit button press
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = "static/"
 

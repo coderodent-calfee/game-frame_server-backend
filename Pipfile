@@ -5,20 +5,20 @@ name = "pypi"
 
 [packages]
 django = "*"
-djangorestframework = "*"
 requests = "*"
 jwt = "*"
 translation = "*"
 django-rest-auth = "*"
 social-auth-app-django = "*"
 python-social-auth = "*"
-django-allauth = "*"
-rest-framework-simplejwt = "*"
 django-rest-framework = "*"
-dj-rest-auth = "*"
 python-dotenv = "*"
-django-environ = "*"
 django-cors-headers = "*"
+django-environ = "*"
+environ = "*"
+djangorestframework = "*"
+rest-framework-simplejwt = "*"
+djangorestframework-simplejwt = "*"
 
 [dev-packages]
 

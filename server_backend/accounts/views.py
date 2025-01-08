@@ -1,112 +1,53 @@
-# game-frame/accounts/views.py
-from allauth.socialaccount.providers.facebook.views import FacebookOAuth2Adapter
-from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
-
-from dj_rest_auth.registration.views import SocialLoginView
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.conf import settings
-import requests
-from rest_framework.views import APIView
-from rest_framework.response import Response
+# accounts/views.py
+from django.contrib.auth import get_user_model
 from rest_framework import status
-from django.contrib.auth.models import User
-from .serializers import AccountSerializer
-from django.http import JsonResponse
-import logging
-from django.http import HttpResponse
-
-def home(request):
-    return HttpResponse("<h1>Accounts Dashboard</h1>")
-
-logger = logging.getLogger(__name__)
-logger.info("*** LOG active ***")
-
-class FacebookLogin(SocialLoginView):
-    adapter_class = FacebookOAuth2Adapter
-
-class GoogleLogin(SocialLoginView):
-    adapter_class = GoogleOAuth2Adapter
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import serializers
 
 
-class CustomGoogleLogin(SocialLoginView):
-    # either make more than one or somehow switch on the path
-    adapter_class = GoogleOAuth2Adapter  # Or another provider you are using
-    client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
+from .models import Account
 
-    def get_response(self):
-        # Get the user from the social authentication process
-        user = self.user
-        # Generate JWT tokens
-        refresh = RefreshToken.for_user(user)
-        access_token = refresh.access_token
-        return Response({
-            'refresh': str(refresh),
-            'access': str(access_token),
-            'user': user.username
-        })
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])  # Require authentication
+def protected_view(request):
+    return Response({"message": "This is a protected view!"})
 
-class GoogleCallbackView(APIView):
-    def get(self, request):
+User = get_user_model()
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password']
+        extra_kwargs = {'password': {'write_only': True}}
 
-        print(f" **** GET GOT ****")
-        logger.info(f" **** GET GOT ****")
-        # Step 1: Get the authorization code from the query parameters
-        authorization_code = request.GET.get('code')
-        print(f"\n\n **** Authorization Code: {authorization_code} ****")
-        logger.info(f"\n\n **** Authorization Code: {authorization_code} ****")
-        if not authorization_code:
-            return Response({'error': 'Authorization code not found'}, status=400)
-
-        # Step 2: Exchange the authorization code for an access token and refresh token
-        token_url = 'https://oauth2.googleapis.com/token'
-        data = {
-            'code': authorization_code,
-            'client_id': settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY,
-            'client_secret': settings.SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET,
-            'redirect_uri': 'http://localhost:8000/accounts/google/login/callback/',
-            'grant_type': 'authorization_code',
-        }
-
-        response = requests.post(token_url, data=data)
-        token_data = response.json()
-        print(f"\n\n **** token_data: {token_data} ****")
-        logger.info(f"\n\n **** token_data: {token_data} ****")
-        if 'access_token' not in token_data:
-            return Response({'error': 'Failed to get access token from Google'}, status=400)
-
-        # Step 3: Use the access token to get the user's Google profile information
-        user_info_url = 'https://www.googleapis.com/oauth2/v2/userinfo'
-        headers = {'Authorization': f"Bearer {token_data['access_token']}"}
-        user_info_response = requests.get(user_info_url, headers=headers)
-        user_info = user_info_response.json()
-
-        print(f"\n\n **** access_token: {token_data['access_token']} ****")
-        logger.info(f"\n\n **** access_token: {token_data['access_token']} ****")
-        print(f"\n\n **** user_info: {user_info} ****")
-        logger.info(f"\n\n **** user_info: {user_info} ****")
-
-        # Step 4: You can now use the user info to either create or update a user
-        # For simplicity, assuming the user is already created:
-        user = self.get_or_create_user(user_info)
-
-        # Step 5: Generate JWT tokens for the user
-        refresh = RefreshToken.for_user(user)
-        access_token = refresh.access_token
-
-        # Step 6: Return the tokens to the client
-        return Response({
-            'refresh': str(refresh),
-            'access': str(access_token),
-            'user': user.username
-        })
-
-    def get_or_create_user(self, user_info):
-        # Replace this with logic to either create a new user or update an existing one
-        # Example:
-        user, created = User.objects.get_or_create(username=user_info['email'], defaults={
-            'email': user_info['email'],
-            'first_name': user_info.get('given_name', ''),
-            'last_name': user_info.get('family_name', ''),
-        })
+    def create(self, validated_data):
+        user = User.objects.create_user(**validated_data)
         return user
+
+@api_view(['POST'])
+def register(request):
+    if request.method == 'POST':
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'userId': str(user.userId),
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+def get_accounts(request):
+    if request.method == 'GET':
+        accounts = Account.objects.all()  # Retrieve all accounts
+        data = accounts.values('username', 'email', 'userId')  # Fetch specific fields
+        return Response(data, status=status.HTTP_200_OK)
