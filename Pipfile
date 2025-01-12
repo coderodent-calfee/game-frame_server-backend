@@ -19,6 +19,8 @@ environ = "*"
 djangorestframework = "*"
 rest-framework-simplejwt = "*"
 djangorestframework-simplejwt = "*"
+channels = "*"
+daphne = "*"
 
 [dev-packages]
 

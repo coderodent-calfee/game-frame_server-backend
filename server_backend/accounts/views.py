@@ -20,6 +20,23 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 def protected_view(request):
     return Response({"message": "This is a protected view!"})
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])  # Require authentication
+def protected_view(request):
+    data = request.data
+    # Example: Extracting specific fields from the body
+    sessionId = data.get('sessionId')
+
+    # Debugging: Log the received data
+    print(f"Received data: {data}")
+
+    # Return a response, including the received data for confirmation
+    return Response({
+        "message": "Data received successfully!",
+        "received_data": data,
+        "sessionId": sessionId,
+    })
+
 User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

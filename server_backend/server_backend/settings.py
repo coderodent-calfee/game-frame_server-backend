@@ -17,13 +17,14 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Initialize environment variables
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 env = environ.Env(
     DEBUG=(bool, False)  # Default DEBUG to False if not set in .env
 )
+# Load the .env file
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env('DEBUG')
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -33,6 +34,7 @@ ALLOWED_HOSTS = [
     '192.168.0.249',
     '192.168.0.200',
     'localhost',
+    '127.0.0.1',
 ]
 
 
@@ -42,6 +44,7 @@ ALLOWED_HOSTS = [
 # ACCOUNT_AUTHENTICATION_METHOD = "username_email"  # Or 'username', 'email'
 # ACCOUNT_EMAIL_REQUIRED = True
 
+ASGI_APPLICATION = 'server_backend.asgi.application'
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -62,13 +65,6 @@ AUTHENTICATION_BACKENDS = [
 ]
 AUTH_USER_MODEL = 'accounts.Account'
 
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    'http://192.168.0.249:8081',
-    'http://192.168.0.200:8081',
-    'http://localhost:8081',
-]
-
 
 DATABASES = {
     "default": {
@@ -79,33 +75,73 @@ DATABASES = {
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.1/topics/i18n/
-LANGUAGE_CODE = "en-us"
-
 
 # Application definition
 INSTALLED_APPS = [
     'game',
     'accounts',
-    "django.contrib.auth",  # Essential for user authentication
-    "django.contrib.contenttypes",  # Required by the ORM
-    "django.contrib.staticfiles",  # Required for static files (optional for now)
-    "rest_framework",  # Django REST Framework
-    "rest_framework_simplejwt",  # JWT Authentication
+    'corsheaders',
+    "django.contrib.auth",  
+    "django.contrib.contenttypes",  
+    "django.contrib.staticfiles",  
+    "rest_framework",  
+    "rest_framework_simplejwt",
+    "channels",
 ]
 
 
 
-MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
 
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+# Internationalization
+# https://docs.djangoproject.com/en/5.1/topics/i18n/
+LANGUAGE_CODE = "en-us"
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'CRITICAL',  # Adjust as needed
+            'propagate': True,
+        },
+        'channels': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
+
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    'http://192.168.0.249:8081',
+    'http://192.168.0.200:8081',
+    'http://localhost:8081',
 ]
 
 
