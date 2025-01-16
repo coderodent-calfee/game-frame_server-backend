@@ -8,7 +8,6 @@ import string
 def generate_game_id(length=6):
     # Generate a secure random string of alphanumeric characters
     gameId = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(length))
-    print(f"Generated Game ID: {gameId}")
     return gameId
 
 class Game(models.Model):

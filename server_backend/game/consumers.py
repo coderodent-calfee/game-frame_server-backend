@@ -32,7 +32,8 @@ def get_player_sessions_from_room(room_name):
     if room_name in socketSession:
         for user_id, sessions in socketSession[room_name].items():
             for session_id, player_id in sessions.items():
-               output[player_id] = session_id  
+                if session_id:
+                   output[player_id] = session_id  
     return output
 
 def get_session_from_player(player_id, room_name):
@@ -43,6 +44,7 @@ def get_session_from_player(player_id, room_name):
                 if current_player_id == player_id:
                     return session_id
     return None
+
 def get_sessions_from_user(user_id, room_name):
     if room_name in socketSession:
         return socketSession[room_name].get(user_id, None)
@@ -52,14 +54,51 @@ def get_socket_from_player(player_id, room_name):
     session_id = get_session_from_player(player_id, room_name)
     return get_socket_from_session(session_id) if session_id else None
 
+def socket_session_connect(session_id, user_id, socket_id, room_name):
+    logger.info(f"*** handle Session->User : '{str(socket_id)[-6:]}->{str(user_id)[:6]}'")
+    logger.info("*** session user: %s %s", session_id, user_id)
+    logger.info("*** room: %s", room_name)
+
+    socketSession[socket_id] = session_id
+    logger.info(f"*** handle socket->Session : socketSession[{str(socket_id)[-6:]}]->{str(socketSession[socket_id])[:6]}'")
+    socketSession[session_id] = user_id
+    logger.info(f"*** handle Session->User : socketSession[{str(session_id)[:6]}]->{str(socketSession[session_id])[:6]}'")
+
+    if room_name not in socketSession:
+        socketSession[room_name] = {}
+    if user_id not in socketSession[room_name]:
+        socketSession[room_name][user_id] = {}
+    logger.info(f"*** handle room->user :socketSession[{str(room_name)}][{user_id}]='{str(socketSession[room_name][user_id])}'")
+
+def socket_session_player(player_id, socket_id, room_name):
+    session_id = socketSession.get(socket_id, None)
+    user_id = socketSession.get(session_id, None) if session_id else None
+
+    if room_name in socketSession:
+        if user_id in socketSession[room_name]:
+            socketSession[room_name][user_id][session_id] = player_id
+    logger.info(f"*** handle session player :socketSession[{str(room_name)}][{user_id}][{session_id}]='{str(socketSession[room_name][user_id][session_id])}'")
+
+def socket_session_disconnect(socket_id, room_name):
+    user_id = None
+    player_id = None
+    session_id = socketSession.pop(socket_id, None)
+    user_id = socketSession.pop(session_id, None) if session_id else None
+    
+    if user_id is not None and room_name in socketSession:
+        if user_id in socketSession[room_name]:
+            player_id = socketSession[room_name][user_id].pop(session_id, None)
+    
+    logger.info(f"*** remove socket->Session : socketSession[{str(socket_id)[-6:]}]->{str(socketSession[socket_id])[:6]}'")
+    logger.info(f"*** remove Session->User : socketSession[{str(session_id)[:6]}]->{str(socketSession[session_id])[:6]}'")
+    logger.info(f"*** remove session player :socketSession[{str(room_name)}][{user_id}][{session_id}] was '{str(player_id)[:6]}'")
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        logger.info("*** GameConsumer connection established")
-        logger.info(f"*** Socket ID (channel_name): {self.channel_name}")
         self.socket_id = self.channel_name
         self.room_name = self.scope['url_route']['kwargs']['room_name']
         self.room_group_name = f'game_{self.room_name}'
+        logger.info(f"*** Socket Id : {str(self.socket_id)[-6:]}")
 
         # Join room group
         await self.channel_layer.group_add(
@@ -69,18 +108,10 @@ class GameConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        logger.info("GameConsumer connection closed")
-        user_id = None
-        player_id = None
+        logger.info("*** GameConsumer connection closed")
         room_name = self.room_name
         socket_id = self.socket_id
-        session_id = socketSession.pop(socket_id, None)
-        user_id = socketSession.pop(session_id, None) if session_id else None
-
-        if user_id is not None and room_name in socketSession:
-            if user_id in socketSession[room_name]:
-                player_id = socketSession[room_name].pop(session_id, None)
-
+        socket_session_disconnect(socket_id, room_name)
         # Leave room group
         await self.channel_layer.group_discard(
             self.room_group_name,
@@ -115,23 +146,12 @@ class GameConsumer(AsyncWebsocketConsumer):
         )
         
     async def handle_session_user(self, data):
-        logger.info("*** handle_session_user ")
 
         session_id = data.get("sessionId")
         user_id = data.get("userId")
         socket_id = self.socket_id
         room_name = self.room_name
-        logger.info("*** session user: %s %s", session_id, user_id)
-        logger.info("*** room: %s", room_name)
-
-        socketSession[socket_id] = session_id
-        socketSession[session_id] = user_id
-
-        if room_name not in socketSession:
-            socketSession[room_name] = {}
-        if user_id not in socketSession[room_name]:
-            socketSession[room_name][user_id] = {}
-
+        socket_session_connect(session_id, user_id, socket_id, room_name)
         # Send message to WebSocket
         await self.send(text_data=json.dumps({
             'type': 'handle_session_user',
@@ -148,14 +168,13 @@ class GameConsumer(AsyncWebsocketConsumer):
         session_id = socketSession.get(socket_id, None)
         user_id = socketSession.get(session_id, None) if session_id else None
 
-        if room_name in socketSession:
-            if user_id in socketSession[room_name]:
-                socketSession[room_name][user_id] = {}
+        socket_session_player(player_id, socket_id, room_name)
 
         # Send message to WebSocket
         await self.send(text_data=json.dumps({
-            'type': 'handle_session_user',
-            'message': f'socket->session / session->user mapped',
+            'type': 'handle_session_player',
+            'message': f' socketSession[room_name][user_id][session_id] = player_id',
             'session_id': session_id,
             'user_id': user_id,
+            'player_id': player_id,
         }))
