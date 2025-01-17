@@ -1,9 +1,9 @@
-﻿import json
+﻿
+import json
 from django.test import Client, RequestFactory, TestCase
 
 from game.models import Game
 from accounts.models import Account
-
 
 class Utilities():
     def __init__(self, name):

@@ -26,6 +26,7 @@ def protected_view(request):
     data = request.data
     # Example: Extracting specific fields from the body
     sessionId = data.get('sessionId')
+    #todo: save 'authenticated' sessionId
 
     # Debugging: Log the received data
     print(f"Received data: {data}")

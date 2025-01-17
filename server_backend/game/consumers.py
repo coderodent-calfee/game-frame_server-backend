@@ -1,8 +1,9 @@
 ﻿import json
-from channels.generic.websocket import AsyncWebsocketConsumer
 from collections import defaultdict
 from channels.generic.websocket import AsyncWebsocketConsumer
 import logging
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +120,7 @@ class GameConsumer(AsyncWebsocketConsumer):
         )
 
     async def receive(self, text_data):
-        logger.debug("Received data: %s", text_data)
+        logger.info("Received data: %s", text_data)
         data = json.loads(text_data)
         message_type = data.get("type")
 
@@ -132,7 +133,30 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self.handle_session_player(data)
         else:
             print(f"Unknown message type: {message_type}")
+
+
+    async def player_added(self, event):
+        message = event['message']
+        logger.info("player_added: %s", message)
+
+        # Send the message to the WebSocket
+        await self.send(text_data=json.dumps({
+            'type': 'player_added',
+            'message': message,
+        }))
         
+    @classmethod
+    def send_message_to_group(cls, group_name, message):
+        logger.info("send_message_to_group: %s", group_name)
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                'type': 'player_added',  # This matches the method name
+                'message': message,
+            }
+        )
+    
     async def handle_client_message(self, data):
         message = data.get("message")
         print(f"Client message received: {message}")

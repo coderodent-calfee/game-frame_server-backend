@@ -21,6 +21,7 @@ rest-framework-simplejwt = "*"
 djangorestframework-simplejwt = "*"
 channels = "*"
 daphne = "*"
+django-fake-model = "*"
 
 [dev-packages]
 

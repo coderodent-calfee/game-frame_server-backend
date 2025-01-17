@@ -113,7 +113,7 @@ LOGGING = {
         },
         'channels': {
             'handlers': ['console'],
-            'level': 'DEBUG',
+            'level': 'CRITICAL',
             'propagate': True,
         },
     },

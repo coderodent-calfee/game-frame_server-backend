@@ -11,7 +11,8 @@ from .models import Game, Player
 from accounts.models import Account
 from rest_framework import status
 from uuid import UUID
-from .consumers import socketSession, get_player_sessions_from_room, get_sessions_from_user, get_user_from_session
+from .consumers import socketSession, get_player_sessions_from_room, get_sessions_from_user, get_user_from_session, \
+    GameConsumer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -184,13 +185,11 @@ def crumpet(request, gameId):
                 player_info_response['player'] = claimed_player_list[0]
 
         logger.info(f"*** CLAIM_PLAYER player_info_response {player_info_response}")  # Debugging log
-        logger.info(f"*** CLAIM_PLAYER player_info_response['player'] {player_info_response['player']}")  # Debugging log
+        logger.info(f"*** CLAIM_PLAYER player_info_response['player'] {player_info_response.get('player',None)}")  # Debugging log
 
         player_info_response['socketSession'] = socketSession # debugging
 
-        logger.info(f"*** CLAIM_PLAYER len(player_info_response['player']) {len(player_info_response['player'])}")  # Debugging log
-
-        if player_info_response['player'] is not None:
+        if player_info_response.get('player',None) is not None:
             return JsonResponse(player_info_response, status = 200)
         player_info_response['error'] = f"No available players found for game {gameId}"
         return JsonResponse(player_info_response, status = 404)
@@ -250,6 +249,8 @@ def add_player(request, gameId):
         #                **({'userId': player.userId.userId} if player.userId.userId == user_id else {})
     } for player in players]
 
+
+
     # Prepare the response
     response_data = {'message': f"{player.name} added to the game", 'game': {
         'gameId': game.gameId,
@@ -262,5 +263,11 @@ def add_player(request, gameId):
         'userId': str(player.userId.userId),  # debugging
         #                **({'userId': player.userId.userId} if player.userId.userId == user_id else {})
     }, 'socketSession': socketSession}
-
+    player_announce = {
+        'message': f"{player.name} added to the game",
+        'playerId': str(player.playerId),
+        'name': player.name,
+        'game_identifier': player.game_identifier,
+    }
+    GameConsumer.send_message_to_group(group_name= f"game_{game.gameId}", message=json.dumps(player_announce))
     return JsonResponse(response_data, status=status.HTTP_201_CREATED)

@@ -169,3 +169,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+.vs/game-frame/FileContentIndex/
+
+.vs/game-frame/v17/
+
+.vs/VSWorkspaceState.json
+
+.vs/
