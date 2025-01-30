@@ -8,7 +8,7 @@ from channels.layers import get_channel_layer
 from asgiref.testing import ApplicationCommunicator
 from channels.testing import WebsocketCommunicator
 from game.consumers import GameConsumer, socket_session_connect, get_user_from_session, get_socket_from_session, \
-    get_sessions_from_user
+    get_sessions_from_user, socketSession, socket_session_player
 from channels.routing import  URLRouter
 from game.models import Game
 from accounts.models import Account
@@ -66,15 +66,23 @@ class Utility():
     def add_player(self, game_id, user_id ):
         response = self.client.post(
             f"/api/game/{game_id}/add/",
-            data={'userId' : user_id},
+            data={'userId' : str(user_id)},
             content_type="application/json"
         )
+
         return json.loads(response.getvalue())
 
     def generate_session_id(self) -> str:
         array = os.urandom(16)  # Generate 16 random bytes
         return ''.join(f'{byte:02x}' for byte in array)  # Convert to a hexadecimal string
 
+    def string_keys_values(self, in_data, out):
+        for k, v in in_data.items():
+            print(f"k:{str(k)} v:{str(v)} {type(v)}")
+            key = str(k) if type(k) is not dict else string_keys_values(k,{})
+            value = str(v) if type(v) is not dict else string_keys_values(v,{})
+            out[key] = value
+        return out
 
 
 class GameViewTestCase(TestCase):
@@ -206,18 +214,17 @@ class GameViewTestCase(TestCase):
             'password',
             'email@email.com'
         )
-        
-        response = utility.add_player(game_id, user_id)
+
         session_id = 'session-12345'
         socket_id = 'socket-12345'
-        
+
         test_user_id = get_user_from_session(session_id)
         self.assertEqual(test_user_id, None)
         test_socket_id = get_socket_from_session(session_id)
         self.assertEqual(test_socket_id, None)
         sessions_in_room = get_sessions_from_user(user_id, game_id)
         self.assertEqual(sessions_in_room, None)
-        
+
         # this is called when we arrive in the lobby
         socket_session_connect(session_id, user_id, socket_id, game_id)
 
@@ -227,7 +234,69 @@ class GameViewTestCase(TestCase):
         self.assertEqual(test_socket_id, socket_id)
 
         sessions_in_room = get_sessions_from_user(user_id, game_id)
-        self.assertEqual(len(sessions_in_room), 1)
-        self.assertEqual(sessions_in_room[0], session_id)
+        self.assertEqual(len(sessions_in_room), 0)
+        self.assertEqual(sessions_in_room, {})
+
+
+
+    def test_mpp(self):
+        utility = Utility()
+
+        new_game_id = utility.create_game()
+
+        new_user = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+
+        response = utility.client.post(
+            f"/api/game/{new_game_id}/add/",
+            data={'userId' : new_user},
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 201)
+
+        json_data = json.loads(response.getvalue())
+        self.assertEqual(json_data.get('message', None), 'Player 1 added to the game')
+
+        player = json_data.get('player', None)
+        self.assertIsNotNone(player)
+        self.assertEqual(player.get('name', None), 'Player 1')
+        self.assertEqual(player.get('game_identifier', None), new_game_id)
+        self.assertEqual(player.get('userId', None), str(new_user))
+
+        player_id = player.get('playerId', None)
+        session_id = 'session-12345'
+        socket_id = 'socket-12345'
+
+
+        # this is called when we arrive in the lobby
+        socket_session_connect(session_id, user_id, socket_id, game_id)
+
+        def string_keys_values(in_data, out):
+            for k, v in in_data.items():
+                print(f"k:{str(k)} v:{str(v)} {type(v)}")
+                key = str(k) if type(k) is not dict else string_keys_values(k,{})
+                value = str(v) if type(v) is not dict else string_keys_values(v,{})
+                out[key] = value
+            return out
+        
+        test_user_id = get_user_from_session(session_id)
+        self.assertEqual(test_user_id, user_id)
+        test_socket_id = get_socket_from_session(session_id)
+        self.assertEqual(test_socket_id, socket_id)
+
+        sessions_in_room = get_sessions_from_user(user_id, game_id)
+        print("sessions_in_room ",sessions_in_room)
+        self.assertEqual(len(sessions_in_room), 0)
+        socket_session_player(player_id, socket_id, game_id)
+
+        print(f"socket_session:", json.dumps(string_keys_values(socketSession, {}), indent=4))
+
+        session_players_in_room = get_sessions_from_user(user_id, game_id)
+        print("session_players_in_room ",session_players_in_room)
+        self.assertEqual(len(session_players_in_room), 1)
+        self.assertEqual(session_players_in_room[session_id], player_id)
         
         

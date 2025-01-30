@@ -34,7 +34,7 @@ def get_player_sessions_from_room(room_name):
         for user_id, sessions in socketSession[room_name].items():
             for session_id, player_id in sessions.items():
                 if session_id:
-                   output[player_id] = session_id  
+                   output[player_id] = session_id
     return output
 
 def get_session_from_player(player_id, room_name):
