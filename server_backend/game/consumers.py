@@ -99,9 +99,9 @@ class GameConsumer(AsyncWebsocketConsumer):
         self.socket_id = self.channel_name
         self.room_name = self.scope['url_route']['kwargs']['room_name']
         self.room_group_name = f'game_{self.room_name}'
+        print(f"*** Socket Id : {str(self.socket_id)[-6:]}")
         logger.info(f"*** Socket Id : {str(self.socket_id)[-6:]}")
 
-        # Join room group
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
@@ -144,18 +144,17 @@ class GameConsumer(AsyncWebsocketConsumer):
             'type': 'player_added',
             'message': message,
         }))
+    
+    async def broadcast_message(self, event):
+        await self.send(text_data=json.dumps(event["data"]))
         
     @classmethod
-    def send_message_to_group(cls, group_name, message):
-        logger.info("send_message_to_group: %s", group_name)
+    def send_message_to_group(cls, group_name, json_data):
+        logger.info("*** GameConsumer send_message_to_group: %s", group_name)
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            group_name,
-            {
-                'type': 'player_added',  # This matches the method name
-                'message': message,
-            }
-        )
+            group_name, 
+            {"type": "broadcast_message", "data": json_data})
     
     async def handle_client_message(self, data):
         message = data.get("message")
@@ -164,8 +163,8 @@ class GameConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_send(
             self.room_group_name,
             {
-                'type': 'chat_message',
-                'message': f'{message} received',
+                'type': 'broadcast_message',
+                "data": {'message': f'{message} received'},
             }
         )
         
