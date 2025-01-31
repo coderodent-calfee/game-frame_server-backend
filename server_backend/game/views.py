@@ -12,7 +12,7 @@ from .models import Game, Player
 from accounts.models import Account
 from rest_framework import status
 from uuid import UUID
-from .consumers import socketSession, get_player_sessions_from_room, get_sessions_from_user, get_user_from_session, \
+from .consumers import socketSession, get_player_sessions_from_room, get_session_players_from_user, get_user_from_session, \
     GameConsumer
 import logging
 

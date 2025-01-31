@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 # }
 socketSession = defaultdict(dict)
 
+def reset_socket_session():
+    socketSession.clear()
+    return socketSession
+
+
 def get_user_from_session(session_id):
     return socketSession.get(session_id, None) if session_id else None
 
@@ -46,10 +51,10 @@ def get_session_from_player(player_id, room_name):
                     return session_id
     return None
 
-def get_sessions_from_user(user_id, room_name):
+def get_session_players_from_user(user_id, room_name):
     if room_name in socketSession:
-        return socketSession[room_name].get(user_id, None)
-    return None
+        return socketSession[room_name].get(user_id, {})
+    return {}
 
 def get_socket_from_player(player_id, room_name):
     session_id = get_session_from_player(player_id, room_name)
@@ -84,15 +89,16 @@ def socket_session_disconnect(socket_id, room_name):
     user_id = None
     player_id = None
     session_id = socketSession.pop(socket_id, None)
+    #print(f"socketSession.get({socket_id}, None) {socketSession.get(socket_id, None)}")
     user_id = socketSession.pop(session_id, None) if session_id else None
     
     if user_id is not None and room_name in socketSession:
         if user_id in socketSession[room_name]:
             player_id = socketSession[room_name][user_id].pop(session_id, None)
-    
-    logger.info(f"*** remove socket->Session : socketSession[{str(socket_id)[-6:]}]->{str(socketSession[socket_id])[:6]}'")
-    logger.info(f"*** remove Session->User : socketSession[{str(session_id)[:6]}]->{str(socketSession[session_id])[:6]}'")
-    logger.info(f"*** remove session player :socketSession[{str(room_name)}][{user_id}][{session_id}] was '{str(player_id)[:6]}'")
+    # accessing the default dict puts things in todo: do this right 
+    # logger.info(f"*** remove socket->Session : socketSession[{str(socket_id)[-6:]}]->{str(socketSession[socket_id])[:6]}'")
+    # logger.info(f"*** remove Session->User : socketSession[{str(session_id)[:6]}]->{str(socketSession[session_id])[:6]}'")
+    # logger.info(f"*** remove session player :socketSession[{str(room_name)}][{user_id}][{session_id}] was '{str(player_id)[:6]}'")
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):
