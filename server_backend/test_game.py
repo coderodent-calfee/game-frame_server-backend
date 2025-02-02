@@ -33,16 +33,11 @@ class Utility():
         return new_game_response
 
     def create_account(self, username, password, email):
-        user_ids = self.user_ids if self.user_ids else []
-        Account.objects.create()
-        users = Account.objects.all()
-        for user in users:
-            if user.userId not in user_ids:
-                new_user_id = user.userId
-                user_ids.append(user.userId)
-        self.user_ids = user_ids
-        return new_user_id
-
+        user = Account.objects.create(username=username, password=password, email=email)
+        if not hasattr(self, 'user_ids') or self.user_ids is None:
+            self.user_ids = []
+        self.user_ids.append(user.userId)
+        return user.userId
 
     def create_game(self):
         game_ids = self.game_ids if self.game_ids else []
@@ -327,10 +322,10 @@ class GameViewTestCase(TestCase):
 
         socket_session_connect(session_id_2, user_id, socket_id_2, game_id)
         socket_session_player(player_id_2, socket_id_2, game_id)
-        
+
         def jd(arg):
             return json.dumps(utility.string_keys_values(arg, {}), indent=4, sort_keys=True)
-        
+
         # print(f"socket_session:", jd(socketSession))
         # print(f"get_player_sessions_from_room({game_id}) {jd(get_player_sessions_from_room(game_id))}")
         # print(f"get_session_players_from_user({user_id}, {game_id})) {jd(get_session_players_from_user(user_id, game_id))}")
@@ -344,7 +339,7 @@ class GameViewTestCase(TestCase):
         self.assertEqual(len(session_players_from_user), 2)
         self.assertEqual(session_players_from_user[session_id_1], player_id_1)
         self.assertEqual(session_players_from_user[session_id_2], player_id_2)
-        
+
         # print(f"get_session_from_player({player_id_1}, {game_id})) {get_session_from_player(player_id_1, game_id)}")
         # print(f"get_socket_from_player({player_id_1}, {game_id})) {get_socket_from_player(player_id_1, game_id)}")
 
@@ -353,21 +348,32 @@ class GameViewTestCase(TestCase):
         self.assertEqual(get_session_from_player(player_id_2, game_id), session_id_2)
         self.assertEqual(get_socket_from_player(player_id_2, game_id), socket_id_2)
 
-        session_players_in_room = get_session_players_from_user(user_id, game_id)
-        self.assertEqual(len(session_players_in_room), 2)
-        self.assertEqual(session_players_in_room[session_id_1], player_id_1)
-        self.assertEqual(session_players_in_room[session_id_2], player_id_2)
+
+    def test_socket_session_players_disconnect(self):
+        utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id,user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        player_id_2 = utility.add_player(game_id,user_id)
+        session_id_2 = 'session-67890'
+        socket_id_2 = 'socket-67890'
+
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        socket_session_connect(session_id_2, user_id, socket_id_2, game_id)
+        socket_session_player(player_id_2, socket_id_2, game_id)
 
         socket_session_disconnect(socket_id_1, game_id)
-        # 
-        # print(f"socket_session:", jd(socketSession))
-        # print(f"get_player_sessions_from_room({game_id}) {jd(get_player_sessions_from_room(game_id))}")
-        # print(f"get_session_players_from_user({user_id}, {game_id})) {jd(get_session_players_from_user(user_id, game_id))}")
-        # print(f"get_session_from_player({player_id_1}, {game_id})) {get_session_from_player(player_id_1, game_id)}")
-        # print(f"get_socket_from_player({player_id_1}, {game_id})) {get_socket_from_player(player_id_1, game_id)}")
-        # 
-        # print(f"get_session_from_player({player_id_2}, {game_id})) {get_session_from_player(player_id_2, game_id)}")
-        # print(f"get_socket_from_player({player_id_2}, {game_id})) {get_socket_from_player(player_id_2, game_id)}")
 
         session_players_in_room = get_session_players_from_user(user_id, game_id)
         self.assertEqual(len(session_players_in_room), 1)
@@ -386,5 +392,200 @@ class GameViewTestCase(TestCase):
         self.assertEqual(len(session_players_from_user), 1)
         self.assertEqual(session_players_from_user[session_id_2], player_id_2)
         
-    def test_socket_session_multiple_players_different_games(self):
+
+    def test_socket_session_multiple_players_multiple_games(self):
+        utility = Utility()
+        game_id_1 = utility.create_game()
+        game_id_2 = utility.create_game()
+        
+        user_id_1 = utility.create_account(
+            'username_1',
+            'password_1',
+            'email_1@email.com'
+        )
+
+        user_id_2 = utility.create_account(
+            'username_2',
+            'password_2',
+            'email_2@email2.com'
+        )
+
+        player_id_user1_game1 = utility.add_player(game_id_1,user_id_1)
+        session_id_user1_game1 = 'session-user1_game1'
+        socket_id_user1_game1 = 'socket-user1_game1'
+        player_id_user2_game1 = utility.add_player(game_id_1,user_id_2)
+        session_id_user2_game1 = 'session-user2_game1'
+        socket_id_user2_game1 = 'socket-user2_game1'
+
+        player_id_user1_game2 = utility.add_player(game_id_2,user_id_1)
+        session_id_user1_game2  = 'session-user1_game2'
+        socket_id_user1_game2 = 'socket-user1_game2'
+        player_id_user2_game2 = utility.add_player(game_id_2,user_id_2)
+        session_id_user2_game2 = 'session-user2_game2'
+        socket_id_user2_game2 = 'socket-user2_game2'
+
+
+        socket_session_connect(session_id_user1_game1, user_id_1, socket_id_user1_game1, game_id_1)
+        socket_session_player(player_id_user1_game1, socket_id_user1_game1, game_id_1)
+
+        socket_session_connect(session_id_user2_game1, user_id_2, socket_id_user2_game1, game_id_1)
+        socket_session_player(player_id_user2_game1, socket_id_user2_game1, game_id_1)
+
+        socket_session_connect(session_id_user1_game2, user_id_1, socket_id_user1_game2, game_id_2)
+        socket_session_player(player_id_user1_game2, socket_id_user1_game2, game_id_2)
+
+        socket_session_connect(session_id_user2_game2, user_id_2, socket_id_user2_game2, game_id_2)
+        socket_session_player(player_id_user2_game2, socket_id_user2_game2, game_id_2)
+
+
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg, {}), indent=4, sort_keys=True)
+
+        player_sessions_from_room = get_player_sessions_from_room(game_id_1)
+        self.assertEqual(len(player_sessions_from_room), 2)
+        self.assertEqual(player_sessions_from_room[player_id_user1_game1], session_id_user1_game1)
+        self.assertEqual(player_sessions_from_room[player_id_user2_game1], session_id_user2_game1)
+
+        session_players_from_user1 = get_session_players_from_user(user_id_1, game_id_1)
+        self.assertEqual(len(session_players_from_user1), 1)
+        self.assertEqual(session_players_from_user1[session_id_user1_game1], player_id_user1_game1)
+
+        session_players_from_user2 = get_session_players_from_user(user_id_2, game_id_1)
+        self.assertEqual(len(session_players_from_user2), 1)
+        self.assertEqual(session_players_from_user2[session_id_user2_game1], player_id_user2_game1)
+
+        self.assertEqual(get_session_from_player(player_id_user1_game1, game_id_1), session_id_user1_game1)
+        self.assertEqual(get_socket_from_player(player_id_user1_game1, game_id_1), socket_id_user1_game1)
+        self.assertEqual(get_session_from_player(player_id_user2_game1, game_id_1), session_id_user2_game1)
+        self.assertEqual(get_socket_from_player(player_id_user2_game1, game_id_1), socket_id_user2_game1)
+
+
+        player_sessions_from_room = get_player_sessions_from_room(game_id_2)
+        self.assertEqual(len(player_sessions_from_room), 2)
+        self.assertEqual(player_sessions_from_room[player_id_user1_game2], session_id_user1_game2)
+        self.assertEqual(player_sessions_from_room[player_id_user2_game2], session_id_user2_game2)
+    
+        session_players_from_user1 = get_session_players_from_user(user_id_1, game_id_2)
+        self.assertEqual(len(session_players_from_user1), 1)
+        self.assertEqual(session_players_from_user1[session_id_user1_game2], player_id_user1_game2)
+    
+        session_players_from_user2 = get_session_players_from_user(user_id_2, game_id_2)
+        self.assertEqual(len(session_players_from_user2), 1)
+        self.assertEqual(session_players_from_user2[session_id_user2_game2], player_id_user2_game2)
+    
+        self.assertEqual(get_session_from_player(player_id_user1_game2, game_id_2), session_id_user1_game2)
+        self.assertEqual(get_socket_from_player(player_id_user1_game2, game_id_2), socket_id_user1_game2)
+        self.assertEqual(get_session_from_player(player_id_user2_game2, game_id_2), session_id_user2_game2)
+        self.assertEqual(get_socket_from_player(player_id_user2_game2, game_id_2), socket_id_user2_game2)
+
+        # print(f"player_id_user1_game1:", player_id_user1_game1)
+        # print(f"player_id_user2_game1:", player_id_user2_game1)
+        # print(f"player_id_user1_game2:", player_id_user1_game2)
+        # print(f"player_id_user2_game2:", player_id_user2_game2)
+        # 
+        # print(f"get_player_sessions_from_room({game_id_1}) {jd(get_player_sessions_from_room(game_id_1))}")
+        # print(f"get_player_sessions_from_room({game_id_2}) {jd(get_player_sessions_from_room(game_id_2))}")
+        # 
+        # print(f"get_session_players_from_user({user_id_1}, {game_id_1}) {jd(get_session_players_from_user(user_id_1, game_id_1))}")
+        # print(f"get_session_players_from_user({user_id_1}, {game_id_2}) {jd(get_session_players_from_user(user_id_1, game_id_2))}")
+        # print(f"get_session_players_from_user({user_id_2}, {game_id_1}) {jd(get_session_players_from_user(user_id_2, game_id_1))}")
+        # print(f"get_session_players_from_user({user_id_2}, {game_id_2}) {jd(get_session_players_from_user(user_id_2, game_id_2))}")
+
+        socket_session_disconnect(socket_id_user1_game1, game_id_1)
+        socket_session_disconnect(socket_id_user1_game2, game_id_2)
+#        print(f"socket_session:", jd(socketSession))
+
+        # print(f"get_player_sessions_from_room({game_id_1}) {jd(get_player_sessions_from_room(game_id_1))}")
+        # print(f"get_player_sessions_from_room({game_id_2}) {jd(get_player_sessions_from_room(game_id_2))}")
+        # 
+        # print(f"get_session_players_from_user({user_id_1}, {game_id_1}) {jd(get_session_players_from_user(user_id_1, game_id_1))}")
+        # print(f"get_session_players_from_user({user_id_1}, {game_id_2}) {jd(get_session_players_from_user(user_id_1, game_id_2))}")
+        # print(f"get_session_players_from_user({user_id_2}, {game_id_1}) {jd(get_session_players_from_user(user_id_2, game_id_1))}")
+        # print(f"get_session_players_from_user({user_id_2}, {game_id_2}) {jd(get_session_players_from_user(user_id_2, game_id_2))}")
+
+        player_sessions_from_room = get_player_sessions_from_room(game_id_1)
+        self.assertEqual(len(player_sessions_from_room), 1)
+        self.assertEqual(player_sessions_from_room[player_id_user2_game1], session_id_user2_game1)
+
+        session_players_from_user1 = get_session_players_from_user(user_id_1, game_id_1)
+        self.assertEqual(len(session_players_from_user1), 0)
+
+        session_players_from_user2 = get_session_players_from_user(user_id_2, game_id_1)
+        self.assertEqual(len(session_players_from_user2), 1)
+        self.assertEqual(session_players_from_user2[session_id_user2_game1], player_id_user2_game1)
+
+        self.assertEqual(get_session_from_player(player_id_user1_game1, game_id_1), None)
+        self.assertEqual(get_socket_from_player(player_id_user1_game1, game_id_1), None)
+        self.assertEqual(get_session_from_player(player_id_user2_game1, game_id_1), session_id_user2_game1)
+        self.assertEqual(get_socket_from_player(player_id_user2_game1, game_id_1), socket_id_user2_game1)
+
+
+        player_sessions_from_room = get_player_sessions_from_room(game_id_2)
+        self.assertEqual(len(player_sessions_from_room), 1)
+        self.assertEqual(player_sessions_from_room[player_id_user2_game2], session_id_user2_game2)
+
+        session_players_from_user1 = get_session_players_from_user(user_id_1, game_id_2)
+        self.assertEqual(len(session_players_from_user1), 0)
+
+        session_players_from_user2 = get_session_players_from_user(user_id_2, game_id_2)
+        self.assertEqual(len(session_players_from_user2), 1)
+        self.assertEqual(session_players_from_user2[session_id_user2_game2], player_id_user2_game2)
+
+        self.assertEqual(get_session_from_player(player_id_user1_game2, game_id_2), None)
+        self.assertEqual(get_socket_from_player(player_id_user1_game2, game_id_2), None)
+        self.assertEqual(get_session_from_player(player_id_user2_game2, game_id_2), session_id_user2_game2)
+        self.assertEqual(get_socket_from_player(player_id_user2_game2, game_id_2), socket_id_user2_game2)
+
+    def test_player_claim_no_game_404(self):
+        utility = Utility()
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        game_id = '567890'
+        response = utility.client.post(
+            f"/api/game/{game_id}/claim/",
+            params={'userId' : 'user_id'},
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+
+        self.assertEqual(json_data['error'], 'Game not found')
+        self.assertEqual(response.status_code, 404)
+
+    def test_claim_no_players(self):
+        print("test_player_claim_no_players_404")
+        utility = Utility()
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        game_id = utility.create_game()
+        body = utility.get_game_info(game_id)
+        self.assertEqual(body['game']['gameId'], game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg, {}), indent=4, sort_keys=True)
+        print(f"gameInfo {jd(body)}")
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/claim/",
+            params={'userId' : 'user_id'},
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+
+        self.assertEqual(json_data['error'], 'Game not found')
+        self.assertEqual(response.status_code, 404)
+        
+    def test_player_claim_no_id(self):
+        utility = Utility()
+
+    def test_player_claim_no_players_404(self):
+        utility = Utility()
+
+    def test_player_claim(self):
         utility = Utility()
