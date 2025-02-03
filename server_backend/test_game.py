@@ -1,4 +1,8 @@
-﻿import asyncio
+﻿
+import django
+django.setup()
+
+import asyncio
 import json
 import os
 import uuid
@@ -74,12 +78,20 @@ class Utility():
         array = os.urandom(16)  # Generate 16 random bytes
         return ''.join(f'{byte:02x}' for byte in array)  # Convert to a hexadecimal string
 
-    def string_keys_values(self, in_data, out):
-        # todo handle list as well
-        for k, v in in_data.items():
-            key = str(k) if type(k) is not dict else self.string_keys_values(k,{})
-            value = str(v) if type(v) is not dict else self.string_keys_values(v,{})
-            out[key] = value
+    def string_keys_values(self, in_data):
+        if type(in_data) is dict:
+            out = {}
+            for k, v in in_data.items():
+                key = self.string_keys_values(k)
+                value = self.string_keys_values(v)
+                out[key] = value
+        elif type(in_data) is list:
+            out = []
+            for v in in_data:
+                value = self.string_keys_values(v)
+                out.append(value)
+        else:
+            out = str(in_data)
         return out
 
 
@@ -537,52 +549,157 @@ class GameViewTestCase(TestCase):
         self.assertEqual(get_session_from_player(player_id_user2_game2, game_id_2), session_id_user2_game2)
         self.assertEqual(get_socket_from_player(player_id_user2_game2, game_id_2), socket_id_user2_game2)
 
-    def test_player_claim_no_game_404(self):
+    def test_claim_session_match(self):
         utility = Utility()
+        game_id = utility.create_game()
+
         user_id = utility.create_account(
             'username',
             'password',
             'email@email.com'
         )
-        game_id = '567890'
+        player_id_1 = utility.add_player(game_id,user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+#        socket_session_disconnect(socket_id_1, game_id)
+
+        # session_id_1b = 'session-12345b'
+        # socket_id_1b = 'socket-12345b'
+        # socket_session_connect(session_id_1b, user_id, socket_id_1b, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
         response = utility.client.post(
             f"/api/game/{game_id}/claim/",
-            params={'userId' : 'user_id'},
+            data={'sessionId' : session_id_1},
             content_type="application/json"
         )
         json_data = json.loads(response.getvalue())
 
+        self.assertEqual(json_data['player']['playerId'], player_id_1)
+        self.assertEqual(response.status_code, 200)
+
+    def test_claim_user_match(self):
+        utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id, user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        socket_session_disconnect(socket_id_1, game_id)
+
+        session_id_1b = 'session-12345b'
+        socket_id_1b = 'socket-12345b'
+        socket_session_connect(session_id_1b, user_id, socket_id_1b, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/claim/",
+            data={'sessionId': session_id_1b},
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+
+        self.assertEqual(json_data['player']['playerId'], player_id_1)
+        self.assertEqual(response.status_code, 200)
+
+    def test_player_claim_no_game_404(self):
+        game_id = '567890'
+        utility = Utility()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/claim/",
+            data={'sessionId': session_id_1},
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
         self.assertEqual(json_data['error'], 'Game not found')
         self.assertEqual(response.status_code, 404)
 
     def test_claim_no_players(self):
-        print("test_player_claim_no_players_404")
         utility = Utility()
+        game_id = utility.create_game()
+
         user_id = utility.create_account(
             'username',
             'password',
             'email@email.com'
         )
-        game_id = utility.create_game()
-        body = utility.get_game_info(game_id)
-        self.assertEqual(body['game']['gameId'], game_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
 
         def jd(arg):
-            return json.dumps(utility.string_keys_values(arg, {}), indent=4, sort_keys=True)
-        print(f"gameInfo {jd(body)}")
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
 
         response = utility.client.post(
             f"/api/game/{game_id}/claim/",
-            params={'userId' : 'user_id'},
+            data={'sessionId': session_id_1},
             content_type="application/json"
         )
         json_data = json.loads(response.getvalue())
-
-        self.assertEqual(json_data['error'], 'Game not found')
+        self.assertEqual(json_data['error'], f"No players found for game {game_id}")
         self.assertEqual(response.status_code, 404)
         
     def test_player_claim_no_id(self):
         utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id,user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        socket_session_disconnect(socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg, {}), indent=4, sort_keys=True)
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/claim/",
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+
+        self.assertEqual(json_data['error'], f"No session id")
+        self.assertEqual(response.status_code, 400)
 
     def test_player_claim_no_players_404(self):
         utility = Utility()

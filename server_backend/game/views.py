@@ -21,7 +21,27 @@ logger = logging.getLogger(__name__)
 def loggering(message):
     print(message)
     logger.info(message)  # Debugging log
-    
+
+
+def string_keys_values(in_data):
+
+    if type(in_data) is dict:
+        out = {}
+        for k, v in in_data.items():
+            key = string_keys_values(k)
+            value = string_keys_values(v)
+            out[key] = value
+    elif type(in_data) is list:
+        out = []
+        for v in in_data:
+            value = string_keys_values(v)
+            out.append(value)
+    else:
+        out = str(in_data)
+    return out
+
+def jd(arg):
+    return json.dumps(string_keys_values(arg), indent=4, sort_keys=True)
 
 def get_player_ids_in_game_with_user_id(game_id, user_id):
     try:
@@ -209,15 +229,21 @@ def name_player(request, gameId):
 
 @api_view(['POST'])
 def claim_player(request, gameId):
-    logger.info(f"*** CLAIM ")  # Debugging log
-    session_id = request.query_params.get('sessionId')
-    user_id = request.query_params.get('userId')
+
+    body_data = json.loads(request.body)
+    session_id = body_data.get('sessionId', None)
+
+    if not session_id:
+        return JsonResponse({"error": f"No session id"}, status = 400)
+    user_id = get_user_from_session(session_id)
+
     if not user_id:
-        user_id = get_user_from_session(session_id)
+        return JsonResponse({"error": f"No user id for session id {session_id}"}, status = 400)
 
     try:
         game = Game.objects.get(gameId=gameId)
         players = game.players.all()  # Fetch related players
+        # player_data contains UUID objects for player Id and user Id
         player_data = [
             {
                 'playerId': player.playerId,
@@ -238,54 +264,27 @@ def claim_player(request, gameId):
         }
 
         claimed_player = None
-        # if we were given the session_id it means we really want the player we were/are attached to if possible
-        if session_id is not None:
-            player_sessions = get_player_sessions_from_room(gameId)
-            logger.info(f"*** CLAIM get_player_sessions_from_room {player_sessions}")  # Debugging log
-            if player_sessions:
-                for p, s in player_sessions.items():
-                    # output[player_id] = session_id  
-                    logger.info(f"*** CLAIM players in game {p[:6]} = {s}")  # Debugging log
-                    if s == session_id:
-                        claimed_player = p
-                        logger.info(f"*** CLAIM player session {session_id[:6]} claims {claimed_player[:6]}")  # Debugging log
-            logger.info(f"*** CLAIM look for disconnected players")  # Debugging log
-            if not claimed_player:
-                disconnected_players = []
-                users_players = []
-                # ok, no session, so maybe there was a dc
-                for p in player_data:
-                    player_id = str(p['playerId'])
-                    player_user_id = str(p['userId'])
-                    if player_id not in player_sessions:
-                        disconnected_players.append(player_id)
-                    if player_user_id == user_id:
-                        users_players.append(player_id)
-                    if player_id not in player_sessions and player_user_id == user_id:
-                        claimed_player = player_id
-                        logger.info(f"*** CLAIM player without session {str(user_id)[:6]} claims {claimed_player[:6]}")  # Debugging log
-                logger.info(f"*** CLAIM disconnected players: {disconnected_players}")  # Debugging log
-                logger.info(f"*** CLAIM user's players: {users_players}")  # Debugging log
+        player_sessions = get_player_sessions_from_room(gameId)
+        if player_sessions:
+            for p, s in player_sessions.items():
+                if str(s) == session_id:
+                    claimed_player = p
 
-            logger.info(f"*** CLAIM claimed_player {claimed_player}")  # Debugging log
-            for person in player_data:
-                logger.info(f"*** CLAIM person {person}")  # Debugging log
-                logger.info(f"*** CLAIM person['playerId'] {person['playerId']}")  # Debugging log
-                logger.info(f"*** CLAIM person['playerId'] == claimed_player {str(person['playerId']) == claimed_player}")  # Debugging log
+        if not claimed_player:
+            # ok, no session, so maybe there was a dc
+            for p in player_data:
+                player_id = str(p['playerId'])
+                p_user_id = p['userId']
+                if player_id not in player_sessions and p_user_id == user_id:
+                    claimed_player = player_id
 
-            claimed_player_list = [person for person in player_data if str(person['playerId']) == claimed_player]
-            if len(claimed_player_list) > 0:
-                player_info_response['player'] = claimed_player_list[0]
-
-        logger.info(f"*** CLAIM player_info_response {player_info_response}")  # Debugging log
-        logger.info(f"*** CLAIM player_info_response['player'] {player_info_response.get('player',None)}")  # Debugging log
-
-        player_info_response['socketSession'] = socketSession # debugging
+        claimed_player_list = [person for person in player_data if str(person['playerId']) == claimed_player]
+        if len(claimed_player_list) > 0:
+            player_info_response['player'] = claimed_player_list[0]
 
         if player_info_response.get('player',None) is not None:
             return JsonResponse(player_info_response, status = 200)
-        player_info_response['error'] = f"No available players found for game {gameId}"
-        return JsonResponse(player_info_response, status = 404)
+        return JsonResponse({"error": f"No available players found for game {gameId}"}, status = 404)
 
     except Game.DoesNotExist:
         return JsonResponse({"error": "Game not found"}, status = 404)
