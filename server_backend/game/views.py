@@ -136,107 +136,88 @@ def get_games(request):
 
 @api_view(['POST'])
 def name_player(request, gameId):
-    logger.info(f"*** NAME_PLAYER ")  # Debugging log
+    logger.info(f"*** NAME_PLAYER initiated for gameId: {gameId}")
+
     game = get_object_or_404(Game, gameId=gameId)
+    if game.players.count() < 1:
+        return JsonResponse({'error': f"No players found for game {gameId}"}, status=404)
 
     try:
         body_data = json.loads(request.body)
-        user_id = body_data.get('userId', None)
-        logger.info(f"*** NAME_PLAYER user_id passed to name_player is {user_id[:6] if user_id else None}")  # Debugging log
-        player_name = body_data.get('name', None)
-        logger.info(f"*** NAME_PLAYER name passed to name_player is {player_name}")  # Debugging log
-        playerId = body_data.get('playerId', None)
-        logger.info(f"*** NAME_PLAYER playerId passed to name_player is {playerId}")  # Debugging log
-        if not playerId or not user_id or not player_name:
-            logger.info(f"*** NAME_PLAYER playerId, userId and name parameters are required")  # Debugging log
+        user_id = body_data.get('userId')
+        player_name = body_data.get('name')
+        player_id = body_data.get('playerId')
+
+        if not all([user_id, player_name, player_id]):
             return JsonResponse({'error': 'playerId, userId and name parameters are required'}, status=status.HTTP_400_BAD_REQUEST)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
-    logger.info(f"*** NAME_PLAYER 1")  # Debugging log
-    players = game.players.all()  # Fetch related players
+    try:
+        player = Player.objects.select_related('userId').get(playerId=uuid.UUID(player_id), game=game)
+    except Player.DoesNotExist:
+        return JsonResponse({'error': f"No player {player_id} to rename for game {gameId}"}, status=404)
+    except ValueError:
+        return JsonResponse({'error': f"Invalid player id {player_id} to rename for game {gameId}"}, status=400)
+
+
+    if str(player.userId.userId) != user_id:
+        return JsonResponse({'error': f"You cannot rename a player that is not your own. player:{player_id}"}, status=401)
+
+    original_name = player.name
+    player.name = player_name
+    player.save()
+
+    logger.info(f"Player renamed from {original_name} to {player_name}")
+
+    # Notify via WebSocket
+    player_announce = {
+        'message': f"{original_name} renamed to {player_name}",
+        'type': 'name_player',
+        'playerId': str(player.playerId),
+        'name': player.name,
+        'game_identifier': player.game_identifier,
+    }
+    GameConsumer.send_message_to_group(
+        group_name=f"game_{game.gameId}",
+        json_data=player_announce
+    )
+
+    # Prepare response
     player_data = [
         {
-            'playerId': player.playerId,
+            'playerId': p.playerId,
+            'name': p.name,
+            'game_identifier': p.game_identifier,
+            'userId': p.userId.userId,
+        } for p in game.players.all()
+    ]
+
+    response_data = {
+        'player': {
+            'playerId': str(player.playerId),
             'name': player.name,
             'game_identifier': player.game_identifier,
             'userId': player.userId.userId,
-        } for player in players
-    ]
-    logger.info(f"*** NAME_PLAYER 2")  # Debugging log
-    if not player_data:
-        logger.info(f"*** NAME_PLAYER No players found for game {gameId}")  # Debugging log
-        return Response({"error": f"No players found for game {gameId}"}, status=404)
-
-    logger.info(f"*** NAME_PLAYER 3")  # Debugging log
-    player_rename_response  = {}
-
-    selected_player_list = [person for person in player_data if str(person['playerId']) == playerId]
-    logger.info(f"*** NAME_PLAYER 4")  # Debugging log
-
-    if len(selected_player_list) > 0:
-        selected_player = selected_player_list[0]
-        if str(selected_player.get('userId', None)) != user_id:
-            return Response({"error": f"You cannot rename a player that is not your own {playerId}"}, status=401)
-        player_rename_response ['player'] = selected_player
-
-    if player_rename_response.get('player',None) is not None:
-        logger.info(f"*** NAME_PLAYER 5")  # Debugging log
-        try:
-            logger.info(f"*** NAME_PLAYER get player {playerId}")  # Debugging log
-            player = Player.objects.get(playerId=uuid.UUID(playerId))
-            logger.info(f"*** NAME_PLAYER current player name {player.name}")  # Debugging log
-            original_name = player.name 
-            player.name = player_name # the actual renaming
-            player.save()
-            logger.info(f"*** NAME_PLAYER new player name {player.name}")  # Debugging log
-            player_announce = {
-                'message': f"{original_name} renamed to {player_name}",
-                'type' : 'name_player',
-                'playerId': str(player.playerId),
-                'name': player.name,
-                'game_identifier': player.game_identifier,
-            }
-            GameConsumer.send_message_to_group(
-                group_name= f"game_{game.gameId}",
-                json_data = player_announce
-            )
-
-        except Player.DoesNotExist:
-            return JsonResponse({'error': 'Player not found'}, status=404)
-
-    if player_rename_response.get('player',None) is not None:
-        player_rename_response['player']['name'] = player_name
-        players = game.players.all()  # Fetch related players
-        player_data = [
-            {
-                'playerId': player.playerId,
-                'name': player.name,
-                'game_identifier': player.game_identifier,
-                'userId': player.userId.userId,
-            } for player in players
-        ]
-        player_rename_response['game'] = {
-            'gameId' : game.gameId,
-            'status' : game.status,
+        },
+        'game': {
+            'gameId': game.gameId,
+            'status': game.status,
             'players': player_data,
         }
-        return JsonResponse(player_rename_response, status = 200)
-    logger.info(f"*** NAME_PLAYER No player {playerId} to rename for game {gameId}")  # Debugging log
-    player_rename_response['error'] = f"No player {playerId} to rename for game {gameId}"
-    return JsonResponse(player_rename_response, status = 404)
+    }
+
+    return JsonResponse(response_data, status=200)
 
 
 @api_view(['POST'])
 def claim_player(request, gameId):
-
     body_data = json.loads(request.body)
     session_id = body_data.get('sessionId', None)
 
     if not session_id:
         return JsonResponse({"error": f"No session id"}, status = 400)
     user_id = get_user_from_session(session_id)
-
     if not user_id:
         return JsonResponse({"error": f"No user id for session id {session_id}"}, status = 400)
 
@@ -291,89 +272,70 @@ def claim_player(request, gameId):
 
 @api_view(['POST'])
 def add_player(request, gameId):
-    logger.info(f"*** ADD_PLAYER ")  # Debugging log
+    logger.info(f"*** ADD_PLAYER for Game ID: {gameId}")
+
     game = get_object_or_404(Game, gameId=gameId)
-    logger.info(f"*** ADD_PLAYER {gameId}")  # Debugging log
+    body_data = request.data  # Use DRF's request parser
 
-    try:
-        body_data = json.loads(request.body)
-        logger.info(f"*** ADD_PLAYER {body_data}")  # Debugging log
-        user_id = body_data.get('userId', None)
-        player_name = body_data.get('name', None)
-        if not user_id:
-            return JsonResponse({'error': 'userId parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON body"}, status=400)
+    user_id = body_data.get('userId')
+    player_name = body_data.get('name')
 
-    logger.info(f"*** ADD_PLAYER {str(user_id)[:6]} {player_name}")  # Debugging log
+    if not user_id:
+        return JsonResponse({'error': 'userId parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         user_account = Account.objects.get(userId=user_id)
     except Account.DoesNotExist:
         return JsonResponse({'error': 'Account not found for the given userId'}, status=status.HTTP_404_NOT_FOUND)
 
-    logger.info(f"*** ADD_PLAYER {user_account}")  # Debugging log
+    if not player_name:
+        player_count = game.players.count()  # Efficient player count
+        player_name = f"Player {player_count + 1}"
 
-    players = game.players.all()  # Fetch related players
+    player = Player.objects.create(game=game, name=player_name, userId=user_account)
+
+    player_announce = {
+        'message': f"{player.name} added to the game",
+        'type': 'add_player',
+        'playerId': str(player.playerId),
+        'name': player.name,
+        'game_identifier': player.game_identifier,
+    }
+
+    logger.info(f"*** ADD_PLAYER announce: {player_announce['message']}")
+
+    GameConsumer.send_message_to_group(
+        group_name=f"game_{game.gameId}",
+        json_data=player_announce
+    )
+
+    # Fetch updated players list after player creation
+    players = game.players.select_related('userId').all()
     player_data = [
         {
             'playerId': player.playerId,
             'name': player.name,
             'game_identifier': player.game_identifier,
             'userId': str(player.userId.userId),
-        } for player in players
+        }
+        for player in players
     ]
 
-    if not player_name:
-        player_name = f"Player {1 + len(player_data)}"
-
-    # Prepare player data
-    player_init = {
-        'game': game,
-        'name': player_name,
-        'userId': user_account,
-    }
-
-    # Create the player
-    player = Player.objects.create(**player_init)
-
-    player_announce = {
-        'message': f"{player.name} added to the game",
-        'type' : 'add_player', 
-        'playerId': str(player.playerId),
-        'name': player.name,
-        'game_identifier': player.game_identifier,
-    }
-    logger.info(f"*** ADD_PLAYER announce {player_announce['message']}")  # Debugging log
-    GameConsumer.send_message_to_group(
-        group_name= f"game_{game.gameId}",
-        json_data = player_announce
-    )    
-    players = game.players.all()  # Fetch related players
-    player_data = [{
-        'playerId': player.playerId,
-        'name': player.name,
-        'game_identifier': player.game_identifier,
-        'userId': str(player.userId.userId),  # debugging
-        #                **({'userId': player.userId.userId} if player.userId.userId == user_id else {}) # debugging
-    } for player in players]
-    
     response_data = {
-        'message': f"{player.name} added to the game", 
+        'message': player_announce['message'],
         'game': {
             'gameId': game.gameId,
             'status': game.status,
             'players': player_data,
-        }, 
+        },
         'player': {
             'playerId': player.playerId,
             'name': player.name,
             'game_identifier': player.game_identifier,
-            'userId': str(player.userId.userId),  # debugging
-            #                **({'userId': player.userId.userId} if player.userId.userId == user_id else {}) # debugging
-        }, 
-        'socketSession': socketSession # debugging
+            'userId': str(player.userId.userId),
+        }
     }
-    logger.info(f"*** ADD_PLAYER response {player_announce['message']}")  # Debugging log
+
+    logger.info(f"*** ADD_PLAYER response: {response_data['message']}")
 
     return JsonResponse(response_data, status=status.HTTP_201_CREATED)

@@ -214,6 +214,45 @@ class GameViewTestCase(TestCase):
         self.assertEqual(game_player.get('playerId', None), player_id)
         self.assertEqual(game_player, player)
 
+    def test_add_player_w_name(self):
+        utility = Utility()
+
+        new_game_id = utility.create_game()
+
+        new_user = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_name = "Player Name"
+        response = utility.client.post(
+            f"/api/game/{new_game_id}/add/",
+            data={
+                'userId' : new_user,
+                'name' : player_name
+            },
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 201)
+
+        json_data = json.loads(response.getvalue())
+        self.assertEqual(json_data.get('message', None), f"{player_name} added to the game")
+
+        player = json_data.get('player', None)
+        self.assertIsNotNone(player)
+        self.assertEqual(player.get('name', None), player_name)
+        self.assertEqual(player.get('game_identifier', None), new_game_id)
+        self.assertEqual(player.get('userId', None), str(new_user))
+
+        player_id = player.get('playerId', None)
+        game = json_data.get('game', None)
+        self.assertEqual(game.get('gameId', None), new_game_id)
+        self.assertEqual(len(game.get('players', [])), 1)
+
+        game_player = game.get('players')[0]
+        self.assertEqual(game_player.get('playerId', None), player_id)
+        self.assertEqual(game_player, player)
+
     def test_socket_session_connect(self):
         utility = Utility()
 
@@ -227,7 +266,7 @@ class GameViewTestCase(TestCase):
         session_id = 'session-12345'
         socket_id = 'socket-12345'
 
-#        print(f"socket_session:", json.dumps(utility.string_keys_values(socketSession, {}), indent=4))
+    #        print(f"socket_session:", json.dumps(utility.string_keys_values(socketSession, {}), indent=4))
 
         self.assertEqual(get_user_from_session(session_id), None)
         self.assertEqual(get_socket_from_session(session_id), None)
@@ -580,6 +619,7 @@ class GameViewTestCase(TestCase):
             content_type="application/json"
         )
         json_data = json.loads(response.getvalue())
+        #        print(f"json_data:", jd(json_data))
 
         self.assertEqual(json_data['player']['playerId'], player_id_1)
         self.assertEqual(response.status_code, 200)
@@ -671,7 +711,7 @@ class GameViewTestCase(TestCase):
         self.assertEqual(json_data['error'], f"No players found for game {game_id}")
         self.assertEqual(response.status_code, 404)
         
-    def test_player_claim_no_id(self):
+    def test_player_claim_no_session_id(self):
         utility = Utility()
         game_id = utility.create_game()
 
@@ -701,8 +741,452 @@ class GameViewTestCase(TestCase):
         self.assertEqual(json_data['error'], f"No session id")
         self.assertEqual(response.status_code, 400)
 
-    def test_player_claim_no_players_404(self):
+    def test_player_claim_no_user_id(self):
         utility = Utility()
+        game_id = utility.create_game()
 
-    def test_player_claim(self):
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id, user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        socket_session_disconnect(socket_id_1, game_id)
+
+        # session_id_1b = 'session-12345b'
+        # socket_id_1b = 'socket-12345b'
+        # socket_session_connect(session_id_1b, user_id, socket_id_1b, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/claim/",
+            data={'sessionId': session_id_1},
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+#        print(f"json_data:", jd(json_data))
+        self.assertEqual(json_data['error'], f"No user id for session id {session_id_1}")
+        self.assertEqual(response.status_code, 400)
+
+    def test_player_claim_no_disconnected_players(self):
         utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id, user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        #        socket_session_disconnect(socket_id_1, game_id)
+
+        session_id_1b = 'session-12345b'
+        socket_id_1b = 'socket-12345b'
+        socket_session_connect(session_id_1b, user_id, socket_id_1b, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/claim/",
+            data={'sessionId': session_id_1b},
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+
+        self.assertEqual(json_data['error'], f"No available players found for game {game_id}")
+        self.assertEqual(response.status_code, 404)
+
+    def test_player_claim_no_user_dc_players(self):
+        utility = Utility()
+        game_id = utility.create_game()
+        user_id_1 = utility.create_account(
+            'username_1',
+            'password_1',
+            'email_1@email.com'
+        )
+
+        user_id_2 = utility.create_account(
+            'username_2',
+            'password_2',
+            'email_2@email2.com'
+        )
+
+        player_id_1 = utility.add_player(game_id,user_id_1)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id_1, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        socket_session_disconnect(socket_id_1, game_id)
+
+        session_id_2 = 'session-user-2'
+        socket_id_2 = 'socket-user-2'
+        socket_session_connect(session_id_2, user_id_2, socket_id_2, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/claim/",
+            data={'sessionId' : session_id_2},
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+        #print(f"json_data:", jd(json_data))
+
+        self.assertEqual(json_data['error'], f"No available players found for game {game_id}")
+        self.assertEqual(response.status_code, 404)
+
+    def test_rename_player(self):
+        utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id,user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        player_name = "Player Name"
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/name/",
+            data={
+                'userId' : user_id,
+                'playerId': player_id_1,
+                'name': player_name,
+            },
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+#        print(f"json_data:", jd(json_data))
+
+        self.assertEqual(json_data['player']['playerId'], player_id_1)
+        self.assertEqual(json_data['player']['name'], player_name)
+        self.assertEqual(response.status_code, 200)
+
+    def test_rename_no_player(self):
+        utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id, user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        player_name = "Player Name"
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/name/",
+            data={
+                'userId': user_id,
+                'name': player_name,
+            },
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+
+        self.assertEqual(json_data['error'], f"playerId, userId and name parameters are required")
+        self.assertEqual(response.status_code, 400)
+
+
+    def test_rename_no_user_id(self):
+        utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id, user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        player_name = "Player Name"
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/name/",
+            data={
+                'playerId': player_id_1,
+                'name': player_name,
+            },
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+
+        self.assertEqual(json_data['error'], f"playerId, userId and name parameters are required")
+        self.assertEqual(response.status_code, 400)
+
+
+    def test_rename_no_name(self):
+        utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id, user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        player_name = "Player Name"
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/name/",
+            data={
+                'userId': user_id,
+                'playerId': player_id_1,
+            },
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+
+        self.assertEqual(json_data['error'], f"playerId, userId and name parameters are required")
+        self.assertEqual(response.status_code, 400)
+
+    def test_rename_no_game(self):
+        utility = Utility()
+        game_id = utility.create_game()
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id, user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        player_name = "Player Name"
+        game_id = '567890'
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/name/",
+            data={
+                'userId': user_id,
+                'name': player_name,
+                'playerId': player_id_1,
+            },
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(json_data['detail'], f"No Game matches the given query.")
+
+    def test_rename_not_my_player(self):
+
+        utility = Utility()
+        game_id = utility.create_game()
+
+        user_id_1 = utility.create_account(
+            'username_1',
+            'password_1',
+            'email_1@email.com'
+        )
+
+        user_id_2 = utility.create_account(
+            'username_2',
+            'password_2',
+            'email_2@email2.com'
+        )
+        player_id_1 = utility.add_player(game_id,user_id_1)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        player_id_2 = utility.add_player(game_id,user_id_2)
+        session_id_2 = 'session-67890'
+        socket_id_2 = 'socket-67890'
+
+        socket_session_connect(session_id_1, user_id_1, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        socket_session_connect(session_id_2, user_id_2, socket_id_2, game_id)
+        socket_session_player(player_id_2, socket_id_2, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        player_name = "Player Name"
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/name/",
+            data={
+                'userId': user_id_2,
+                'name': player_name,
+                'playerId': player_id_1,
+            },
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+        # print(f"json_data:", jd(json_data))
+
+        self.assertEqual(json_data['error'], f"You cannot rename a player that is not your own. player:{player_id_1}")
+        self.assertEqual(response.status_code, 401)
+
+
+    def test_rename_no_players_in_game(self):
+        utility = Utility()
+        game_id = utility.create_game()
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+
+        player_id_1 = "not in game"
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        player_name = "Player Name"
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/name/",
+            data={
+                'userId': user_id,
+                'name': player_name,
+                'playerId': player_id_1,
+            },
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+        # print(f"json_data:", jd(json_data))
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(json_data['error'], f"No players found for game {game_id}")
+
+
+    def test_rename_player_not_found(self):
+        utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id,user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        player_name = "Player Name"
+
+        player_id_bad = str(uuid.uuid4())
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/name/",
+            data={
+                'userId' : user_id,
+                'playerId': player_id_bad,
+                'name': player_name,
+            },
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+        # print(f"json_data:", jd(json_data))
+        self.assertEqual(json_data['error'], f"No player {player_id_bad} to rename for game {game_id}")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_rename_bad_player_id(self):
+        utility = Utility()
+        game_id = utility.create_game()
+
+        user_id = utility.create_account(
+            'username',
+            'password',
+            'email@email.com'
+        )
+        player_id_1 = utility.add_player(game_id,user_id)
+        session_id_1 = 'session-12345'
+        socket_id_1 = 'socket-12345'
+
+        socket_session_connect(session_id_1, user_id, socket_id_1, game_id)
+        socket_session_player(player_id_1, socket_id_1, game_id)
+
+        def jd(arg):
+            return json.dumps(utility.string_keys_values(arg), indent=4, sort_keys=True)
+
+        player_name = "Player Name"
+
+        player_id_bad = "not in game"
+
+        response = utility.client.post(
+            f"/api/game/{game_id}/name/",
+            data={
+                'userId' : user_id,
+                'playerId': player_id_bad,
+                'name': player_name,
+            },
+            content_type="application/json"
+        )
+        json_data = json.loads(response.getvalue())
+        # print(f"json_data:", jd(json_data))
+        self.assertEqual(json_data['error'], f"Invalid player id {player_id_bad} to rename for game {game_id}")
+
+        self.assertEqual(response.status_code, 400)
