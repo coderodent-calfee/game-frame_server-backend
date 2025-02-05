@@ -24,7 +24,6 @@ def loggering(message):
 
 
 def string_keys_values(in_data):
-
     if type(in_data) is dict:
         out = {}
         for k, v in in_data.items():
@@ -43,37 +42,63 @@ def string_keys_values(in_data):
 def jd(arg):
     return json.dumps(string_keys_values(arg), indent=4, sort_keys=True)
 
-def get_player_ids_in_game_with_user_id(game_id, user_id):
-    try:
-        # Assuming game_id is a string and matches the gameId field
-        game = Game.objects.get(gameId=game_id)  # Use gameId (CharField)
-        logger.info(f"found  game {game_id}")  # Debugging log
+# def get_player_ids_in_game_with_user_id(game_id, user_id):
+#     try:
+#         # Assuming game_id is a string and matches the gameId field
+#         game = Game.objects.get(gameId=game_id)  # Use gameId (CharField)
+#         logger.info(f"found  game {game_id}")  # Debugging log
+#
+#         userId = UUID(user_id)  # Convert to UUID
+#         logger.info(f"userId {userId}")  # Debugging log
+#
+#         # Filter players by userId
+#         players = game.players.filter(userId__userId=userId)
+#         logger.info(f"found {len(players)} players {user_id}")  # Debugging log
+#
+#         # Prepare player data
+#         player_data = [
+#             {
+#                 'playerId': player.playerId,
+#                 'name': player.name,
+#                 'game_identifier': player.game_identifier,
+#                 'userId': player.userId.userId
+#             }
+#             for player in players
+#         ]
+#         logger.info(f"Prepared player data {user_id}")  # Debugging log
+#
+#         return player_data
+#     except Game.DoesNotExist:
+#         return []  # Handle the case where the game does not exist
+#     except Exception as e:
+#         logger.info(f"Error: {e}")
+#         return []
 
-        userId = UUID(user_id)  # Convert to UUID
-        logger.info(f"userId {userId}")  # Debugging log
-        
-        # Filter players by userId
-        players = game.players.filter(userId__userId=userId)
-        logger.info(f"found {len(players)} players {user_id}")  # Debugging log
+def prepare_player_data(players, user_id=None):
+    return [
+        {
+            'playerId': str(player.playerId),
+            'name': player.name,
+            'game_identifier': player.game_identifier,
+            'userId': str(player.userId.userId),  # Debugging: show all user ids in game
+            #                **({'userId': str(player.userId.userId)} if str(player.userId.userId) == str(user_id) else {}) # no debug: only include owners user Id
+        }
+        for player in players
+    ]
 
-        # Prepare player data
-        player_data = [
-            {
-                'playerId': player.playerId,
-                'name': player.name,
-                'game_identifier': player.game_identifier,
-                'userId': player.userId.userId
-            }
-            for player in players
-        ]
-        logger.info(f"Prepared player data {user_id}")  # Debugging log
+def prepare_game_data(game, players=None):
+    if players is None:
+        players = game.players.select_related('userId').all()
+    player_data = prepare_player_data(players)
 
-        return player_data
-    except Game.DoesNotExist:
-        return []  # Handle the case where the game does not exist
-    except Exception as e:
-        logger.info(f"Error: {e}")
-        return []
+    if not player_data:
+        logger.info(f"*** GAME_INFO No players found for game {game.gameId}")
+
+    return {
+        'gameId': game.gameId,
+        'status': game.status,
+        'players': player_data,
+    }
 
 
 @api_view(['POST'])
@@ -93,40 +118,21 @@ def create_game(request):
 def get_game_info(request, gameId):
     user_id = request.query_params.get('userId')
     logger.info(f"*** GAME_INFO user_id passed to get_game_info is {user_id[:6] if user_id else None}")  # Debugging log
+
     session_id = request.query_params.get('sessionId')
     logger.info(f"*** GAME_INFO session_id passed to get_game_info is {session_id[:6] if session_id else None}")  # Debugging log
+
     try:
-
         game = Game.objects.get(gameId=gameId)
-        players = game.players.all()  # Fetch related players
-        player_data = [
-            {
-                'playerId': player.playerId, 
-                'name': player.name, 
-                'game_identifier': player.game_identifier,
-                'userId': str(player.userId.userId), # debugging
-#                **({'userId': player.userId.userId} if player.userId.userId == user_id else {})
-            } for player in players
-        ]
-        if not player_data:
-            logger.info(f"*** GAME_INFO No players found for game {gameId}")  # Debugging log
-        # else:
-        #     for p in player_data:
-        #         logger.info(f"*** GAME_INFO players in game {str(p['playerId'])[:6]}")  # Debugging log
-
-
         game_info_response = {
-            'game':{
-                'gameId': game.gameId,
-                'status': game.status,
-                'players': player_data,
-            }
+            'game': prepare_game_data(game),
+            'socketSession': socketSession
         }
-        game_info_response['socketSession'] = socketSession # debugging
-        return JsonResponse(game_info_response, status = 200)
-    
+        return JsonResponse(game_info_response, status=200)
+
     except Game.DoesNotExist:
         return Response({"error": "Game not found"}, status=404)
+
 
 @api_view(['GET'])
 def get_games(request):
@@ -136,43 +142,38 @@ def get_games(request):
 
 @api_view(['POST'])
 def name_player(request, gameId):
-    logger.info(f"*** NAME_PLAYER initiated for gameId: {gameId}")
-
     game = get_object_or_404(Game, gameId=gameId)
     if game.players.count() < 1:
         return JsonResponse({'error': f"No players found for game {gameId}"}, status=404)
 
     try:
         body_data = json.loads(request.body)
-        user_id = body_data.get('userId')
-        player_name = body_data.get('name')
-        player_id = body_data.get('playerId')
+        user_id_str = body_data.get('userId')
+        new_player_name = body_data.get('name')
+        player_id_str = body_data.get('playerId')
 
-        if not all([user_id, player_name, player_id]):
-            return JsonResponse({'error': 'playerId, userId and name parameters are required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not all([user_id_str, new_player_name, player_id_str]):
+            return JsonResponse({'error': 'playerId, userId and name parameters are required'}, status=400)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
     try:
-        player = Player.objects.select_related('userId').get(playerId=uuid.UUID(player_id), game=game)
+        player = Player.objects.select_related('userId').get(playerId=uuid.UUID(player_id_str), game=game)
     except Player.DoesNotExist:
-        return JsonResponse({'error': f"No player {player_id} to rename for game {gameId}"}, status=404)
+        return JsonResponse({'error': f"No player {player_id_str} to rename for game {gameId}"}, status=404)
     except ValueError:
-        return JsonResponse({'error': f"Invalid player id {player_id} to rename for game {gameId}"}, status=400)
+        return JsonResponse({'error': f"Invalid player id {player_id_str} to rename for game {gameId}"}, status=400)
 
-
-    if str(player.userId.userId) != user_id:
-        return JsonResponse({'error': f"You cannot rename a player that is not your own. player:{player_id}"}, status=401)
+    if str(player.userId.userId) != user_id_str:
+        return JsonResponse({'error': f"You cannot rename a player that is not your own. player:{player_id_str}"}, status=401)
 
     original_name = player.name
-    player.name = player_name
+    player.name = new_player_name
     player.save()
-
-    logger.info(f"Player renamed from {original_name} to {player_name}")
 
     # Notify via WebSocket
     player_announce = {
-        'message': f"{original_name} renamed to {player_name}",
+        'message': f"{original_name} renamed to {new_player_name}",
         'type': 'name_player',
         'playerId': str(player.playerId),
         'name': player.name,
@@ -184,27 +185,9 @@ def name_player(request, gameId):
     )
 
     # Prepare response
-    player_data = [
-        {
-            'playerId': p.playerId,
-            'name': p.name,
-            'game_identifier': p.game_identifier,
-            'userId': p.userId.userId,
-        } for p in game.players.all()
-    ]
-
     response_data = {
-        'player': {
-            'playerId': str(player.playerId),
-            'name': player.name,
-            'game_identifier': player.game_identifier,
-            'userId': player.userId.userId,
-        },
-        'game': {
-            'gameId': game.gameId,
-            'status': game.status,
-            'players': player_data,
-        }
+        'player': prepare_player_data([player])[0],
+        'game': prepare_game_data(game)
     }
 
     return JsonResponse(response_data, status=200)
@@ -213,67 +196,53 @@ def name_player(request, gameId):
 @api_view(['POST'])
 def claim_player(request, gameId):
     body_data = json.loads(request.body)
-    session_id = body_data.get('sessionId', None)
+    session_id_str = body_data.get('sessionId', None)
 
-    if not session_id:
+    if not session_id_str:
         return JsonResponse({"error": f"No session id"}, status = 400)
-    user_id = get_user_from_session(session_id)
+    user_id = get_user_from_session(session_id_str)
     if not user_id:
-        return JsonResponse({"error": f"No user id for session id {session_id}"}, status = 400)
+        return JsonResponse({"error": f"No user id for session id {session_id_str}"}, status = 400)
+
+    user_id_str = str(user_id)
 
     try:
         game = Game.objects.get(gameId=gameId)
-        players = game.players.all()  # Fetch related players
-        # player_data contains UUID objects for player Id and user Id
-        player_data = [
-            {
-                'playerId': player.playerId,
-                'name': player.name,
-                'game_identifier': player.game_identifier,
-                'userId': player.userId.userId,
-            } for player in players
-        ]
-        if not player_data:
-            return Response({"error": f"No players found for game {gameId}"}, status=404)
 
-        player_info_response = {
-            'game' : {
-                'gameId' : game.gameId,
-                'status' : game.status,
-                'players': player_data,
-            },
-        }
+        player_info_response = prepare_game_data(game)
+        player_data = player_info_response['players']
+
+        if not player_data:
+            return JsonResponse({"error": f"No players found for game {gameId}"}, status=404)
 
         claimed_player = None
         player_sessions = get_player_sessions_from_room(gameId)
         if player_sessions:
             for p, s in player_sessions.items():
-                if str(s) == session_id:
+                if s == session_id_str:
                     claimed_player = p
 
         if not claimed_player:
             # ok, no session, so maybe there was a dc
             for p in player_data:
-                player_id = str(p['playerId'])
-                p_user_id = p['userId']
-                if player_id not in player_sessions and p_user_id == user_id:
-                    claimed_player = player_id
+                player_id_str = p['playerId']
+                p_user_id_str = p['userId']
 
-        claimed_player_list = [person for person in player_data if str(person['playerId']) == claimed_player]
+                if player_id_str not in player_sessions and p_user_id_str == user_id_str:
+                    claimed_player = player_id_str
+
+        claimed_player_list = [person for person in player_data if person['playerId'] == claimed_player]
         if len(claimed_player_list) > 0:
             player_info_response['player'] = claimed_player_list[0]
 
         if player_info_response.get('player',None) is not None:
             return JsonResponse(player_info_response, status = 200)
         return JsonResponse({"error": f"No available players found for game {gameId}"}, status = 404)
-
     except Game.DoesNotExist:
         return JsonResponse({"error": "Game not found"}, status = 404)
 
 @api_view(['POST'])
 def add_player(request, gameId):
-    logger.info(f"*** ADD_PLAYER for Game ID: {gameId}")
-
     game = get_object_or_404(Game, gameId=gameId)
     body_data = request.data  # Use DRF's request parser
 
@@ -301,14 +270,10 @@ def add_player(request, gameId):
         'name': player.name,
         'game_identifier': player.game_identifier,
     }
-
-    logger.info(f"*** ADD_PLAYER announce: {player_announce['message']}")
-
     GameConsumer.send_message_to_group(
         group_name=f"game_{game.gameId}",
         json_data=player_announce
     )
-
     # Fetch updated players list after player creation
     players = game.players.select_related('userId').all()
     player_data = [
@@ -335,7 +300,4 @@ def add_player(request, gameId):
             'userId': str(player.userId.userId),
         }
     }
-
-    logger.info(f"*** ADD_PLAYER response: {response_data['message']}")
-
     return JsonResponse(response_data, status=status.HTTP_201_CREATED)

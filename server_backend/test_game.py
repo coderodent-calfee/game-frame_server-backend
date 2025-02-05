@@ -275,7 +275,7 @@ class GameViewTestCase(TestCase):
         # this is called when we arrive in the lobby
         socket_session_connect(session_id, user_id, socket_id, game_id)
 
-        self.assertEqual(get_user_from_session(session_id), user_id)
+        self.assertEqual(get_user_from_session(session_id), str(user_id))
         self.assertEqual(get_socket_from_session(session_id), socket_id)
         self.assertEqual(get_session_players_from_user(user_id, game_id), {})
 
@@ -655,6 +655,7 @@ class GameViewTestCase(TestCase):
             content_type="application/json"
         )
         json_data = json.loads(response.getvalue())
+        # print(f"json_data:", jd(json_data))
 
         self.assertEqual(json_data['player']['playerId'], player_id_1)
         self.assertEqual(response.status_code, 200)
