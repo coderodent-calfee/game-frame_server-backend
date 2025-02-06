@@ -145,7 +145,6 @@ def socket_session_disconnect(socket_id, room_name):
     room_name_str = str(room_name)
     socket_id_str = str(socket_id)
     session_id_str = socketSession.pop(socket_id_str, None)
-    #print(f"socketSession.get({socket_id}, None) {socketSession.get(socket_id, None)}")
     user_id_str = socketSession.pop(session_id_str, None) if session_id_str else None
     
     if user_id_str is not None and room_name in socketSession:
@@ -275,16 +274,29 @@ class GameConsumer(AsyncWebsocketConsumer):
         socket_id = self.socket_id
         session_id = socketSession.get(socket_id, None)
         user_id = socketSession.get(session_id, None) if session_id else None
-
+    
         socket_session_player(player_id, socket_id, room_name)
+    
+        # Send message to the entire group
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'broadcast_handle_session_player',  # Calls broadcast method
+                'message': f'socketSession[{room_name}][{user_id}][{session_id}] = {player_id}',
+                'session_id': session_id,
+                'user_id': user_id,
+                'player_id': player_id,
+            }
+        )
 
-        # Send message to WebSocket
+    # Define the method to handle group messages
+    async def broadcast_handle_session_player(self, event):
         await self.send(text_data=json.dumps({
             'type': 'handle_session_player',
-            'message': f' socketSession[room_name][user_id][session_id] = player_id',
-            'session_id': session_id,
-            'user_id': user_id,
-            'player_id': player_id,
+            'message': event['message'],
+            'session_id': event['session_id'],
+            'user_id': event['user_id'],
+            'player_id': event['player_id'],
         }))
 
     async def handle_player_disconnect(self, player_id, game_id):
@@ -298,14 +310,6 @@ class GameConsumer(AsyncWebsocketConsumer):
             'playerId': str(player_id),
             'game_identifier': game_id,
         }
-        # 
-        # await self.send_message_to_group(
-        #     group_name=f"game_{game_id}",
-        #     json_data=player_announce
-        # )
-        # async_to_sync(channel_layer.group_send)(
-        #     group_name,
-        #     {"type": "broadcast_message", "data": json_data})
 
         await self.channel_layer.group_send(
             self.room_group_name,

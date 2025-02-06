@@ -75,13 +75,15 @@ def jd(arg):
 #         return []
 
 def prepare_player_data(players, user_id=None):
+    active_sessions = get_player_sessions_from_room(players[0].game_identifier) if players else {}
     return [
         {
             'playerId': str(player.playerId),
             'name': player.name,
             'game_identifier': player.game_identifier,
-            'userId': str(player.userId.userId),  # Debugging: show all user ids in game
-            #                **({'userId': str(player.userId.userId)} if str(player.userId.userId) == str(user_id) else {}) # no debug: only include owners user Id
+            'userId': str(player.userId.userId),  # Debugging: show all user IDs in the game
+            # **({'userId': str(player.userId.userId)} if str(player.userId.userId) == str(user_id) else {}) # no debug: only include owners user Id
+            'isActive': str(player.playerId) in active_sessions  # Check if player is active
         }
         for player in players
     ]
