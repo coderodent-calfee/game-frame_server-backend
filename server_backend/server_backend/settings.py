@@ -138,9 +138,15 @@ CHANNEL_LAYERS = {
 }
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     'http://192.168.0.249:8081',
+    'localhost:8081',
+    'localhost:8080',
+    'localhost:3035',
     'http://192.168.0.200:8081',
+    'http://192.168.0.200:8080',
+    'http://192.168.0.200:3035',
     'http://localhost:8081',
 ]
 

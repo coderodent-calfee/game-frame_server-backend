@@ -6,7 +6,6 @@ name = "pypi"
 [packages]
 django = "*"
 requests = "*"
-jwt = "*"
 translation = "*"
 django-rest-auth = "*"
 social-auth-app-django = "*"
@@ -22,6 +21,7 @@ djangorestframework-simplejwt = "*"
 channels = "*"
 daphne = "*"
 django-fake-model = "*"
+pyjwt = "*"
 
 [dev-packages]
 

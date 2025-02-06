@@ -173,14 +173,14 @@ class GameConsumer(AsyncWebsocketConsumer):
         player_id = get_player_from_socket(socket_id, room_name)
         socket_session_disconnect(socket_id, room_name)
 
-        self.handle_player_disconnect(player_id, room_name)
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'player_disconnected',
-                'message': f'Player {player_id} has left the room {self.room_name}'
-            }
-        )
+        await self.handle_player_disconnect(player_id, room_name)  # Await the function
+        # await self.channel_layer.group_send(
+        #     self.room_group_name,
+        #     {
+        #         'type': 'player_disconnected',
+        #         'message': f'Player {player_id} has left the room {self.room_name}'
+        #     }
+        # )
 
         # Leave room group
         await self.channel_layer.group_discard(
@@ -218,6 +218,15 @@ class GameConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'message': event['message']
         }))
+    async def player_disconnected(self, event):
+        logger.info("player_disconnected: %s", event)
+    
+        # Ensure the full JSON payload is sent
+        await self.send(text_data=json.dumps({
+            'type': event.get('type', 'player_disconnected'),
+            'message': event.get('message', ''),
+            'data': event.get('data', {})  # Include the `data` dictionary
+        }))
 
     async def broadcast_message(self, event):
         logger.info("*** GameConsumer broadcast_message: %s", json.dumps(event["data"]))
@@ -228,7 +237,7 @@ class GameConsumer(AsyncWebsocketConsumer):
         logger.info("*** GameConsumer send_message_to_group: %s", group_name)
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            group_name, 
+            group_name,
             {"type": "broadcast_message", "data": json_data})
 
 
@@ -278,18 +287,34 @@ class GameConsumer(AsyncWebsocketConsumer):
             'player_id': player_id,
         }))
 
-    def handle_player_disconnect(self, player_id, game_id):
+    async def handle_player_disconnect(self, player_id, game_id):
         room_name = self.room_name
         socket_id = self.socket_id
-        loggering(f"handle_player_disconnect: {player_id} {game_id}")
-
+        logger.info(f"handle_player_disconnect: {player_id} {game_id}")
+    
         player_announce = {
             'message': f"{player_id} disconnected",
-            'type': 'player_disconnect',
+            'type': 'player_disconnected',
             'playerId': str(player_id),
             'game_identifier': game_id,
         }
-        sync_to_async(GameConsumer.send_message_to_group)(
-            group_name=f"game_{game_id}",
-            json_data=player_announce
+        # 
+        # await self.send_message_to_group(
+        #     group_name=f"game_{game_id}",
+        #     json_data=player_announce
+        # )
+        # async_to_sync(channel_layer.group_send)(
+        #     group_name,
+        #     {"type": "broadcast_message", "data": json_data})
+
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'message': f"{player_id} disconnected",
+                'type': 'player_disconnected',
+                'data': {
+                    'playerId': str(player_id),
+                    'game_identifier': game_id,
+                }
+            }
         )
