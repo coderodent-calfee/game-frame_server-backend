@@ -42,37 +42,6 @@ def string_keys_values(in_data):
 def jd(arg):
     return json.dumps(string_keys_values(arg), indent=4, sort_keys=True)
 
-# def get_player_ids_in_game_with_user_id(game_id, user_id):
-#     try:
-#         # Assuming game_id is a string and matches the gameId field
-#         game = Game.objects.get(gameId=game_id)  # Use gameId (CharField)
-#         logger.info(f"found  game {game_id}")  # Debugging log
-#
-#         userId = UUID(user_id)  # Convert to UUID
-#         logger.info(f"userId {userId}")  # Debugging log
-#
-#         # Filter players by userId
-#         players = game.players.filter(userId__userId=userId)
-#         logger.info(f"found {len(players)} players {user_id}")  # Debugging log
-#
-#         # Prepare player data
-#         player_data = [
-#             {
-#                 'playerId': player.playerId,
-#                 'name': player.name,
-#                 'game_identifier': player.game_identifier,
-#                 'userId': player.userId.userId
-#             }
-#             for player in players
-#         ]
-#         logger.info(f"Prepared player data {user_id}")  # Debugging log
-#
-#         return player_data
-#     except Game.DoesNotExist:
-#         return []  # Handle the case where the game does not exist
-#     except Exception as e:
-#         logger.info(f"Error: {e}")
-#         return []
 
 def prepare_player_data(players, user_id=None):
     active_sessions = get_player_sessions_from_room(players[0].game_identifier) if players else {}

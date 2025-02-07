@@ -85,7 +85,6 @@ def get_session_from_player(player_id, room_name):
     player_id_str = str(player_id)
     if room_name_str in socketSession:
         for user_id_str, sessions in socketSession[room_name].items():
-            # Iterate through sessions for each user
             for session_id_str, current_player_id_str in sessions.items():
                 if current_player_id_str == player_id_str:
                     return session_id_str
@@ -110,20 +109,13 @@ def socket_session_connect(session_id, user_id, socket_id, room_name):
     socket_id_str = str(socket_id)
     room_name_str = str(room_name)
 
-    logger.info(f"*** handle Session->User : '{socket_id_str[-6:]}->{user_id_str[:6]}'")
-    logger.info("*** session user: %s %s", session_id_str, user_id_str)
-    logger.info("*** room: %s", room_name_str)
-
     socketSession[socket_id_str] = session_id_str
-    logger.info(f"*** handle socket->Session : socketSession[{socket_id_str[-6:]}]->{socketSession[socket_id_str][:6]}'")
     socketSession[session_id_str] = user_id_str
-    logger.info(f"*** handle Session->User : socketSession[{session_id_str[:6]}]->{socketSession[session_id_str][:6]}'")
 
     if room_name_str not in socketSession:
         socketSession[room_name_str] = {}
     if user_id_str not in socketSession[room_name_str]:
         socketSession[room_name_str][user_id_str] = {}
-    logger.info(f"*** handle room->user :socketSession[{room_name_str}][{user_id_str}]='{socketSession[room_name_str][user_id_str]}'")
 
 def socket_session_player(player_id, socket_id, room_name):
     socket_id_str = str(socket_id)
@@ -137,11 +129,8 @@ def socket_session_player(player_id, socket_id, room_name):
     if room_name_str in socketSession:
         if user_id_str in socketSession[room_name_str]:
             socketSession[room_name_str][user_id_str][session_id_str] = player_id_str
-    logger.info(f"*** handle session player :socketSession[{str(room_name_str)}][{user_id_str}][{session_id_str}]='{socketSession[room_name_str][user_id_str][session_id_str]}'")
 
 def socket_session_disconnect(socket_id, room_name):
-    user_id = None
-    player_id = None
     room_name_str = str(room_name)
     socket_id_str = str(socket_id)
     session_id_str = socketSession.pop(socket_id_str, None)
@@ -149,16 +138,13 @@ def socket_session_disconnect(socket_id, room_name):
     
     if user_id_str is not None and room_name in socketSession:
         if user_id_str in socketSession[room_name_str]:
-            player_id = socketSession[room_name_str][user_id_str].pop(session_id_str, None)
+            socketSession[room_name_str][user_id_str].pop(session_id_str, None)
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.socket_id = self.channel_name
         self.room_name = self.scope['url_route']['kwargs']['room_name']
         self.room_group_name = f'game_{self.room_name}'
-        print(f"*** Socket Id : {str(self.socket_id)[-6:]}")
-        logger.info(f"*** Socket Id : {str(self.socket_id)[-6:]}")
-
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
@@ -166,74 +152,58 @@ class GameConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        logger.info("*** GameConsumer connection closed")
         room_name = str(self.room_name)
         socket_id = self.socket_id
         player_id = get_player_from_socket(socket_id, room_name)
         socket_session_disconnect(socket_id, room_name)
 
-        await self.handle_player_disconnect(player_id, room_name)  # Await the function
-        # await self.channel_layer.group_send(
-        #     self.room_group_name,
-        #     {
-        #         'type': 'player_disconnected',
-        #         'message': f'Player {player_id} has left the room {self.room_name}'
-        #     }
-        # )
-
-        # Leave room group
+        await self.handle_player_disconnect(player_id)
+        
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
         )
 
     async def receive(self, text_data):
-        logger.info("Received data: %s", text_data)
-        data = json.loads(text_data)
-        message_type = data.get("type")
+        try:
+            data = json.loads(text_data)
+            message_type = data.get("type")
 
-        # Route message handling based on its type
-        if message_type == "clientMessage":
-            await self.handle_client_message(data)
-        elif message_type == "sessionUser":
-            await self.handle_session_user(data)
-        elif message_type == "sessionPlayer":
-            await self.handle_session_player(data)
-        else:
-            print(f"Unknown message type: {message_type}")
+            handlers = {
+                "clientMessage": self.handle_client_message,
+                "sessionUser": self.handle_session_user,
+                "sessionPlayer": self.handle_session_player
+            }
+
+            handler = handlers.get(message_type)
+            if handler:
+                await handler(data)
+            else:
+                logger.warning(f"Unknown message type: {message_type}")
+
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON received")
 
 
     async def player_added(self, event):
         message = event['message']
-        logger.info("player_added: %s", message)
-
-        # Send the message to the WebSocket
         await self.send(text_data=json.dumps({
             'type': 'player_added',
             'message': message,
         }))
-
+        
     async def player_disconnected(self, event):
-        await self.send(text_data=json.dumps({
-            'message': event['message']
-        }))
-    async def player_disconnected(self, event):
-        logger.info("player_disconnected: %s", event)
-    
-        # Ensure the full JSON payload is sent
         await self.send(text_data=json.dumps({
             'type': event.get('type', 'player_disconnected'),
             'message': event.get('message', ''),
-            'data': event.get('data', {})  # Include the `data` dictionary
+            'data': event.get('data', {})
         }))
 
     async def broadcast_message(self, event):
-        logger.info("*** GameConsumer broadcast_message: %s", json.dumps(event["data"]))
         await self.send(text_data=json.dumps(event["data"]))
         
     @classmethod
     def send_message_to_group(cls, group_name, json_data):
-        logger.info("*** GameConsumer send_message_to_group: %s", group_name)
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             group_name,
@@ -259,7 +229,6 @@ class GameConsumer(AsyncWebsocketConsumer):
         socket_id = self.socket_id
         room_name = self.room_name
         socket_session_connect(session_id, user_id, socket_id, room_name)
-        # Send message to WebSocket
         await self.send(text_data=json.dumps({
             'type': 'handle_session_user',
             'message': f'socket->session / session->user mapped',
@@ -277,11 +246,10 @@ class GameConsumer(AsyncWebsocketConsumer):
     
         socket_session_player(player_id, socket_id, room_name)
     
-        # Send message to the entire group
         await self.channel_layer.group_send(
             self.room_group_name,
             {
-                'type': 'broadcast_handle_session_player',  # Calls broadcast method
+                'type': 'broadcast_handle_session_player',
                 'message': f'socketSession[{room_name}][{user_id}][{session_id}] = {player_id}',
                 'session_id': session_id,
                 'user_id': user_id,
@@ -289,7 +257,6 @@ class GameConsumer(AsyncWebsocketConsumer):
             }
         )
 
-    # Define the method to handle group messages
     async def broadcast_handle_session_player(self, event):
         await self.send(text_data=json.dumps({
             'type': 'handle_session_player',
@@ -299,17 +266,8 @@ class GameConsumer(AsyncWebsocketConsumer):
             'player_id': event['player_id'],
         }))
 
-    async def handle_player_disconnect(self, player_id, game_id):
-        room_name = self.room_name
-        socket_id = self.socket_id
-        logger.info(f"handle_player_disconnect: {player_id} {game_id}")
-    
-        player_announce = {
-            'message': f"{player_id} disconnected",
-            'type': 'player_disconnected',
-            'playerId': str(player_id),
-            'game_identifier': game_id,
-        }
+    async def handle_player_disconnect(self, player_id):
+        game_id = self.room_name
 
         await self.channel_layer.group_send(
             self.room_group_name,
