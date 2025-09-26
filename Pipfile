@@ -1,30 +1,16 @@
-[[source]]
-url = "https://pypi.org/simple"
-verify_ssl = true
-name = "pypi"
+[requires]
+python_version = "3.12"
 
 [packages]
 django = "*"
 requests = "*"
-translation = "*"
 django-rest-auth = "*"
 social-auth-app-django = "*"
 python-social-auth = "*"
-django-rest-framework = "*"
+djangorestframework = "*"
 python-dotenv = "*"
 django-cors-headers = "*"
 django-environ = "*"
-environ = "*"
-djangorestframework = "*"
-rest-framework-simplejwt = "*"
 djangorestframework-simplejwt = "*"
 channels = "*"
 daphne = "*"
-django-fake-model = "*"
-pyjwt = "*"
-
-[dev-packages]
-
-[requires]
-python_version = "3.12"
-python_full_version = "3.12.2"
