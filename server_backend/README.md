@@ -8,6 +8,21 @@ API:
 
 accounts/
     path('token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+body
+{
+  "username" : string
+  "password" : string
+}
+response
+{
+    "refresh": string,
+    "access": string,
+    "userId": uuid like string
+}
+
+
+
+
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('register/', register, name='register'),
     path('protected/', protected_view, name='protected_view'), # test token protection
