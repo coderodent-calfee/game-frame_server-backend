@@ -14,3 +14,5 @@ django-environ = "*"
 djangorestframework-simplejwt = "*"
 channels = "*"
 daphne = "*"
+
+[dev-packages]

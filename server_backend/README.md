@@ -37,4 +37,16 @@ game/
     path('', views.get_games, name='get_games'),
 #    path('<str:gameId>/echo/', views.echo_body, name='echo'),
 
+if there are problems with daphne, then installing daphne in the pipenv should fix it.
+
+the unsecured server DB should be at 
+http://192.168.0.249:8000/
+test it with 
+http://192.168.0.249:8000/api/accounts/ 
+
+if it is not ready, then from .\game-frame\server\server_backend> :
+pipenv run python manage.py migrate
+
+
 use /server/start.bat to launch server
+
