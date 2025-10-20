@@ -74,9 +74,11 @@ def prepare_game_data(game, players=None):
 
 @api_view(['POST'])
 def create_game(request):
+
     user_id = request.query_params.get('userId')
     logger.info(f"user_id passed to create_game is {user_id}")  # Debugging log
     #todo: save creator id too
+    # userId should be in the body of this post
     game_data = request.data
     game = Game.objects.create(**game_data)
     serializer = GameSerializer(game)
@@ -88,10 +90,10 @@ def create_game(request):
 @api_view(['GET'])
 def get_game_info(request, gameId):
     user_id = request.query_params.get('userId')
-    logger.info(f"*** GAME_INFO user_id passed to get_game_info is {user_id[:6] if user_id else None}")  # Debugging log
+    logger.info(f"*** GAME_INFO user_id passed to get_game_info is {user_id[:6] if user_id else None} (first 6 chars)")  # Debugging log
 
     session_id = request.query_params.get('sessionId')
-    logger.info(f"*** GAME_INFO session_id passed to get_game_info is {session_id[:6] if session_id else None}")  # Debugging log
+    logger.info(f"*** GAME_INFO session_id passed to get_game_info is {session_id[:6] if session_id else None} (first 6 chars)")  # Debugging log
 
     try:
         game = Game.objects.get(gameId=gameId)
