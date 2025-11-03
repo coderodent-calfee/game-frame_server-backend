@@ -136,6 +136,10 @@ def socket_session_disconnect(socket_id, room_name):
     session_id_str = socketSession.pop(socket_id_str, None)
     user_id_str = socketSession.pop(session_id_str, None) if session_id_str else None
     
+    print(f"socketSession keys: {list(socketSession.keys())}")
+    print(f"room_name={room_name!r} ({type(room_name)}), room_name_str={room_name_str!r}")
+
+
     if user_id_str is not None and room_name in socketSession:
         if user_id_str in socketSession[room_name_str]:
             socketSession[room_name_str][user_id_str].pop(session_id_str, None)

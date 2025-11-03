@@ -12,7 +12,7 @@ from .models import Game, Player
 from accounts.models import Account
 from rest_framework import status
 from uuid import UUID
-from .consumers import socketSession, get_player_sessions_from_room, get_session_players_from_user, get_user_from_session, \
+from .consumers import get_session_from_player, socketSession, get_player_sessions_from_room, get_session_players_from_user, get_user_from_session, \
     GameConsumer
 import logging
 
@@ -89,12 +89,6 @@ def create_game(request):
 
 @api_view(['GET'])
 def get_game_info(request, gameId):
-    user_id = request.query_params.get('userId')
-    logger.info(f"*** GAME_INFO user_id passed to get_game_info is {user_id[:6] if user_id else None} (first 6 chars)")  # Debugging log
-
-    session_id = request.query_params.get('sessionId')
-    logger.info(f"*** GAME_INFO session_id passed to get_game_info is {session_id[:6] if session_id else None} (first 6 chars)")  # Debugging log
-
     try:
         game = Game.objects.get(gameId=gameId)
         game_info_response = {
@@ -170,18 +164,23 @@ def name_player(request, gameId):
 def claim_player(request, gameId):
     body_data = json.loads(request.body)
     session_id_str = body_data.get('sessionId', None)
+    user_id = get_user_from_session(session_id_str)
+    user_id_str = str(user_id)
+
+    print("\n===== CLAIM PLAYER REQUEST =====")
+    print(f"USER_ID: {user_id_str}")
+    print(f"SESSION_ID: {session_id_str}")
+    print(f"GAME_ID: {gameId}")
 
     if not session_id_str:
         return JsonResponse({"error": f"No session id"}, status = 400)
-    user_id = get_user_from_session(session_id_str)
     if not user_id:
         return JsonResponse({"error": f"No user id for session id {session_id_str}"}, status = 400)
 
-    user_id_str = str(user_id)
 
     try:
         game = Game.objects.get(gameId=gameId)
-
+        print(f"FOUND GAME: {game.gameId}")
         player_info_response = prepare_game_data(game)
         player_data = player_info_response['players']
 
@@ -194,6 +193,7 @@ def claim_player(request, gameId):
             for p, s in player_sessions.items():
                 if s == session_id_str:
                     claimed_player = p
+                    print(f"EXISTING PLAYER FOUND Session:{session_id_str}: {claimed_player}")
 
         if not claimed_player:
             # ok, no session, so maybe there was a dc
@@ -203,13 +203,21 @@ def claim_player(request, gameId):
 
                 if player_id_str not in player_sessions and p_user_id_str == user_id_str:
                     claimed_player = player_id_str
+                    print(f"EXISTING PLAYER FOUND Session:{get_session_from_player(claimed_player, game.gameId)}: {claimed_player}")
+
 
         claimed_player_list = [person for person in player_data if person['playerId'] == claimed_player]
         if len(claimed_player_list) > 0:
             player_info_response['player'] = claimed_player_list[0]
 
         if player_info_response.get('player',None) is not None:
+
+            print(f"CLAIM PLAYER {player_info_response['player'].playerId}")
+
             return JsonResponse(player_info_response, status = 200)
+        
+        print(f"No available players found for game {gameId}")
+
         return JsonResponse({"error": f"No available players found for game {gameId}"}, status = 404)
     except Game.DoesNotExist:
         return JsonResponse({"error": "Game not found"}, status = 404)
