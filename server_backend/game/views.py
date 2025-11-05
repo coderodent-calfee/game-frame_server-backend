@@ -12,7 +12,7 @@ from .models import Game, Player
 from accounts.models import Account
 from rest_framework import status
 from uuid import UUID
-from .consumers import get_session_from_player, socketSession, get_player_sessions_from_room, get_session_players_from_user, get_user_from_session, \
+from .consumers import get_session_from_player, get_socket_from_player, socketSession, get_player_sessions_from_room, get_session_players_from_user, get_user_from_session, \
     GameConsumer
 import logging
 
@@ -95,6 +95,37 @@ def get_game_info(request, gameId):
             'game': prepare_game_data(game),
             'socketSession': socketSession
         }
+        players = game_info_response["game"]["players"]
+
+        logger.info(f"\n=== DEBUG: Game Info for room {gameId}  ({len(players)} players) ===")
+
+        for player in players:
+            # logger.info(f"player::")
+            # player_name = player["name"]
+            # logger.info(f"player_name: {player_name}")
+            # user_id = player["userId"]
+            # logger.info(f"user_id: {user_id}")
+            # player_id = player["playerId"]
+            # logger.info(f"player_id: {player_id}")
+            # session_id = get_session_from_player(player_id, gameId)
+            # logger.info(f"session_id: {session_id}")
+            # socket_id = get_socket_from_player(player_id, gameId)
+            # logger.info(f"socket_id: {socket_id}")
+
+            player_name = player["name"]
+            user_id = player["userId"]
+            player_id = player["playerId"]
+            session_id = get_session_from_player(player_id, gameId)
+            socket_id = get_socket_from_player(player_id, gameId)
+            socket_active = "✅" if socket_id else "❌"
+            logger.info(
+                f" Player: {player_name or 'None':<12} | "
+                f"User: {(user_id[:6] if user_id else 'None'):<6} | "
+                f"PlayerID: {(player_id[:6] if player_id else 'None'):<6} | "
+                f"Session: {(session_id[:6] if session_id else 'None'):<6} | {socket_active}"
+            )
+        logger.info(f"=== END DEBUG {gameId} ===\n")
+
         return JsonResponse(game_info_response, status=200)
 
     except Game.DoesNotExist:
@@ -193,7 +224,7 @@ def claim_player(request, gameId):
             for p, s in player_sessions.items():
                 if s == session_id_str:
                     claimed_player = p
-                    print(f"EXISTING PLAYER FOUND Session:{session_id_str}: {claimed_player}")
+                    print(f"EXISTING PLAYER FOUND: (1) Session matched:{session_id_str}: {claimed_player}")
 
         if not claimed_player:
             # ok, no session, so maybe there was a dc
@@ -203,21 +234,20 @@ def claim_player(request, gameId):
 
                 if player_id_str not in player_sessions and p_user_id_str == user_id_str:
                     claimed_player = player_id_str
-                    print(f"EXISTING PLAYER FOUND Session:{get_session_from_player(claimed_player, game.gameId)}: {claimed_player}")
+                    print(f"EXISTING PLAYER FOUND (2) Session disconnected: "
+                        f"{get_session_from_player(claimed_player, game.gameId)}: {claimed_player}")
+                    break
 
-
-        claimed_player_list = [person for person in player_data if person['playerId'] == claimed_player]
-        if len(claimed_player_list) > 0:
-            player_info_response['player'] = claimed_player_list[0]
+        for person in player_data:
+            if person['playerId'] == claimed_player:
+                player_info_response['player'] = person
+                break
 
         if player_info_response.get('player',None) is not None:
-
-            print(f"CLAIM PLAYER {player_info_response['player'].playerId}")
-
+            print(f"CLAIM PLAYER {player_info_response['player'].get('playerId')}")
             return JsonResponse(player_info_response, status = 200)
         
         print(f"No available players found for game {gameId}")
-
         return JsonResponse({"error": f"No available players found for game {gameId}"}, status = 404)
     except Game.DoesNotExist:
         return JsonResponse({"error": "Game not found"}, status = 404)

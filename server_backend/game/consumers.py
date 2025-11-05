@@ -31,6 +31,24 @@ def string_keys_values(in_data):
 def jd(arg):
     return json.dumps(string_keys_values(arg), indent=4, sort_keys=True)
 
+
+
+def debug_socket_lookup(prefix: str, socket_id: str, socketSession: dict):
+    session_id = socketSession.get(socket_id)
+    user_id = socketSession.get(session_id) if session_id else None
+
+    logger.info(f"🧩 {prefix} socket_id={socket_id[:8]} "
+                 f"session_id={str(session_id)[:8] if session_id else 'None'} "
+                 f"user_id={str(user_id)[:8] if user_id else 'None'}")
+
+def dump_socket_session(label: str, socketSession: dict):
+    logger.info(f"=== SOCKET SESSION DUMP: {label} ===")
+    snapshot = {
+        k: str(v)[:8] if not isinstance(v, dict) else {kk: str(vv)[:8] for kk, vv in v.items()}
+        for k, v in socketSession.items()
+    }
+    logger.info(json.dumps(snapshot, indent=2))
+
 # socketSession structure
 # socketSession = {
 #     'room_name': {
@@ -104,6 +122,7 @@ def get_socket_from_player(player_id, room_name):
     return get_socket_from_session(session_id_str) if session_id_str else None
 
 def socket_session_connect(session_id, user_id, socket_id, room_name):
+    debug_socket_lookup("BEFORE socket_session_connect", socket_id, socketSession)
     session_id_str = str(session_id)
     user_id_str = str(user_id)
     socket_id_str = str(socket_id)
@@ -116,33 +135,36 @@ def socket_session_connect(session_id, user_id, socket_id, room_name):
         socketSession[room_name_str] = {}
     if user_id_str not in socketSession[room_name_str]:
         socketSession[room_name_str][user_id_str] = {}
+    debug_socket_lookup("AFTER socket_session_connect", socket_id, socketSession)
+    dump_socket_session("AFTER session_user mapping", socketSession)
+
 
 def socket_session_player(player_id, socket_id, room_name):
+    debug_socket_lookup("BEFORE socket_session_player", socket_id, socketSession)
     socket_id_str = str(socket_id)
     room_name_str = str(room_name)
     player_id_str = str(player_id)
-
-
     session_id_str = socketSession.get(socket_id_str, None)
     user_id_str = socketSession.get(session_id_str, None) if session_id_str else None
-
     if room_name_str in socketSession:
         if user_id_str in socketSession[room_name_str]:
             socketSession[room_name_str][user_id_str][session_id_str] = player_id_str
+    debug_socket_lookup("AFTER socket_session_player", socket_id, socketSession)
+    dump_socket_session("AFTER session_player mapping", socketSession)
+
 
 def socket_session_disconnect(socket_id, room_name):
+    debug_socket_lookup("BEFORE socket_session_disconnect", socket_id, socketSession)
     room_name_str = str(room_name)
     socket_id_str = str(socket_id)
     session_id_str = socketSession.pop(socket_id_str, None)
     user_id_str = socketSession.pop(session_id_str, None) if session_id_str else None
-    
     print(f"socketSession keys: {list(socketSession.keys())}")
     print(f"room_name={room_name!r} ({type(room_name)}), room_name_str={room_name_str!r}")
-
-
     if user_id_str is not None and room_name in socketSession:
         if user_id_str in socketSession[room_name_str]:
             socketSession[room_name_str][user_id_str].pop(session_id_str, None)
+    debug_socket_lookup("AFTER socket_session_disconnect", socket_id, socketSession)
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -160,9 +182,7 @@ class GameConsumer(AsyncWebsocketConsumer):
         socket_id = self.socket_id
         player_id = get_player_from_socket(socket_id, room_name)
         socket_session_disconnect(socket_id, room_name)
-
         await self.handle_player_disconnect(player_id)
-        
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
@@ -227,7 +247,6 @@ class GameConsumer(AsyncWebsocketConsumer):
         )
         
     async def handle_session_user(self, data):
-
         session_id = data.get("sessionId")
         user_id = data.get("userId")
         socket_id = self.socket_id
@@ -247,9 +266,7 @@ class GameConsumer(AsyncWebsocketConsumer):
         socket_id = self.socket_id
         session_id = socketSession.get(socket_id, None)
         user_id = socketSession.get(session_id, None) if session_id else None
-    
         socket_session_player(player_id, socket_id, room_name)
-    
         await self.channel_layer.group_send(
             self.room_group_name,
             {
@@ -272,7 +289,6 @@ class GameConsumer(AsyncWebsocketConsumer):
 
     async def handle_player_disconnect(self, player_id):
         game_id = self.room_name
-
         await self.channel_layer.group_send(
             self.room_group_name,
             {
